@@ -2,17 +2,6 @@
 include "holonomic_robot.inc"
 include "map.inc"
 
-# window configurations for this simulation instance
-# see for detaiils: http://playerstage.sourceforge.net/doc/stage-cvs/group__window.html
-window
-( 
-  size [ 500.000 500.000 ] 
-  center [-0.077 -0.231] 
-  rotate [ 0 0 ]
-  scale 26.000 
-  show_data 1 # make sure we can see the effect of the controller
-)
-
 # the 'floor' used, generally is a png/bmp file 
 # see: http://playerstage.sourceforge.net/doc/stage-cvs/group__model.html
 floorplan
