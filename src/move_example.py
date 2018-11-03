@@ -162,7 +162,7 @@ def run ():
             angulo = laserMsg.angle_increment * idx
 
             distancia_decomposta = np.array([distancia*np.cos(angulo), distancia*np.sin(angulo), 0])
-            posicaoObstaculo = distancia_decomposta + pose_odom
+            posicaoObstaculo = rot_z.dot(distancia_decomposta) + pose_odom
 
             posicaoGrid_obstaculo_i = int(np.ceil((posicaoObstaculo[1]-YMIN)/GRID_SIZE[2]))
             posicaoGrid_obstaculo_j = int(np.ceil((posicaoObstaculo[0]-XMIN)/GRID_SIZE[2]))
