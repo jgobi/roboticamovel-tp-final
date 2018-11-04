@@ -14,8 +14,8 @@ from bresenham import bresenham
 laserMsg = None
 odomMsg = None
 
-XMIN = -16 # x mínimo do mapa (usualmente (-1)*largura/2)
-YMIN = -16 # y mínimo do mapa (usualmente (-1)*altura/2)
+XMIN = -8 # x mínimo do mapa (usualmente (-1)*largura/2)
+YMIN = -8 # y mínimo do mapa (usualmente (-1)*altura/2)
 MAP_RESOLUTION = 1.0 # resolucao do mapa
 
 GRID_RESOLUTION_MULTIPLIER = 10 # nível de detalhe
@@ -39,7 +39,7 @@ goal = (7, 7)
 
 
 def run ():
-    global laserMsg, odomMsg, pose, kp, XMIN, YMIN, GRID_SIZE
+    global laserMsg, odomMsg, pose, kp, XMIN, YMIN, GRID_SIZE, GRID_RESOLUTION_MULTIPLIER, MAP_RESOLUTION
 
     rospy.init_node('move_example', anonymous=True)
     v_pub = rospy.Publisher('cmd_vel', Twist, queue_size=10)
@@ -137,53 +137,49 @@ def run ():
 
 
         # ===========[ MAPEAMENTO ]=========== #
+
+        pose_vec = np.array([pose.position.x, pose.position.y])
         
-        rot_z = np.array([[np.cos(theta) , np.sin(theta), 0],
-                           [-np.sin(theta), np.cos(theta), 0],
-                           [0             , 0            , 1]])
-            
-        pose_odom = np.array([pose.position.x, pose.position.y, 0])
-
-        # angle = 0
-        # for i in range(5):
-        #     break
-        #     print angle, laserMsg.ranges[angle]
-        #     distancia_obs = np.array([laserMsg.ranges[angle*2]*np.cos(np.deg2rad(angle)), laserMsg.ranges[angle*2]*np.sin(np.deg2rad(angle)), 0])
-        #     print rot_z.dot(distancia_obs.T) + pose_odom
-        #     angle+=45
-        #     print "\n"
-
-        posicaoGrid_robo_i = int(np.ceil((pose_odom[1]-YMIN)/GRID_SIZE[2]))
-        posicaoGrid_robo_j = int(np.ceil((pose_odom[0]-XMIN)/GRID_SIZE[2]))
         for idx, distancia in enumerate(laserMsg.ranges, start=0):
             if distancia >= laserMsg.range_max:
                 continue
 
+            d_vec = np.array([distancia, 0])
+
             angulo = laserMsg.angle_increment * idx
 
-            distancia_decomposta = np.array([distancia*np.cos(angulo), distancia*np.sin(angulo), 0])
-            posicaoObstaculo = rot_z.dot(distancia_decomposta) + pose_odom
+            ctrl = np.array([[np.cos(theta+angulo) , np.sin(theta+angulo)],
+                             [-np.sin(theta+angulo), np.cos(theta+angulo)]])
 
-            posicaoGrid_obstaculo_i = int(np.ceil((posicaoObstaculo[1]-YMIN)/GRID_SIZE[2]))
-            posicaoGrid_obstaculo_j = int(np.ceil((posicaoObstaculo[0]-XMIN)/GRID_SIZE[2]))
+            # posicao_obstaculo = ctrl.dot(d_vec) + pose_vec
+            posicao_obstaculo = (np.array([distancia*np.cos(theta+angulo), distancia*np.sin(theta+angulo)]) + pose_vec)
 
-            if posicaoGrid_obstaculo_i < 0 or posicaoGrid_obstaculo_j < 0 or posicaoGrid_obstaculo_i >= GRID_SIZE[0] or posicaoGrid_obstaculo_j >= GRID_SIZE[1]:
-                continue
-            for cell in list(bresenham(posicaoGrid_robo_i, posicaoGrid_robo_j, posicaoGrid_obstaculo_i, posicaoGrid_obstaculo_j))[:-1]:
-                # print cell
-                # print posicaoGrid_robo[0], posicaoGrid_robo[1], posicaoGrid_obstaculo[0], posicaoGrid_obstaculo[1]
-                grid[cell[0]-1,cell[1]-1] -= 1
-                if grid[cell[0]-1,cell[1]-1] < 0:
-                    grid[cell[0]-1,cell[1]-1] = 0
+            posicao_obstaculo_grid = (np.ceil(1/GRID_SIZE[2] * (posicao_obstaculo - np.array([XMIN, YMIN])*MAP_RESOLUTION)))%160
+
+            print int(posicao_obstaculo_grid[0]), int(posicao_obstaculo_grid[1])
+            grid[int(posicao_obstaculo_grid[0]), int(posicao_obstaculo_grid[1])] = 100
+
+
+            # if posicaoGrid_obstaculo_i < 0 or posicaoGrid_obstaculo_j < 0 or posicaoGrid_obstaculo_i >= GRID_SIZE[0] or posicaoGrid_obstaculo_j >= GRID_SIZE[1]:
+            #     continue
+
+            # for cell in list(bresenham(posicaoGrid_robo_i, posicaoGrid_robo_j, posicaoGrid_obstaculo_i, posicaoGrid_obstaculo_j))[:-1]:
+            #     # print cell
+            #     # print posicaoGrid_robo[0], posicaoGrid_robo[1], posicaoGrid_obstaculo[0], posicaoGrid_obstaculo[1]
+            #     grid[cell[0]-1,cell[1]-1] -= 1
+            #     if grid[cell[0]-1,cell[1]-1] < 0:
+            #         grid[cell[0]-1,cell[1]-1] = 0
                     
-            grid[posicaoGrid_obstaculo_i-1, posicaoGrid_obstaculo_j-1] += 2
-            if grid[posicaoGrid_obstaculo_i-1, posicaoGrid_obstaculo_j-1] > 100:
-                grid[posicaoGrid_obstaculo_i-1, posicaoGrid_obstaculo_j-1] = 100
+            # grid[posicaoGrid_obstaculo_i-1, posicaoGrid_obstaculo_j-1] += 2
+            # if grid[posicaoGrid_obstaculo_i-1, posicaoGrid_obstaculo_j-1] > 100:
+            #     grid[posicaoGrid_obstaculo_i-1, posicaoGrid_obstaculo_j-1] = 100
             #print angulo, posicaoGrid
         # print occupancy_grid
             
         print "\n"
-        v_pub.publish(cmd_vel)
+        # v_pub.publish(cmd_vel)
+        # grid[:,15] = 100
+        print GRID_SIZE[0], GRID_SIZE[1], GRID_SIZE[0]*GRID_SIZE[1]
         occupancy_grid.data = grid.reshape(GRID_SIZE[0]*GRID_SIZE[1])
         og_pub.publish(occupancy_grid)
         rate.sleep()
