@@ -11,13 +11,16 @@ from tf.transformations import euler_from_quaternion, quaternion_from_euler
 import numpy as np
 from bresenham import bresenham
 
+import sys
+
 laserMsg = None
 odomMsg = None
 
 MAP_WIDTH = 16
 MAP_HEIGHT = MAP_WIDTH
+MAP_BL_POSITION = [-8, -8] # posição do canto inferior esquerdo do mapa
 
-GRID_RESOLUTION_MULTIPLIER = 5 # nível de detalhe
+GRID_RESOLUTION_MULTIPLIER = 7 # nível de detalhe
 
 # --- INICIO NÃO EDITAR
 GRID_SIZE = (MAP_WIDTH*GRID_RESOLUTION_MULTIPLIER, MAP_HEIGHT*GRID_RESOLUTION_MULTIPLIER, 1.0/GRID_RESOLUTION_MULTIPLIER) # The last one is the resolution
@@ -31,14 +34,14 @@ pose = None
 kp = 0.9
 
 # ======================[ GOAL ]====================== #
-# if len(sys.argv) >= 3:
-#     goal = (int(sys.argv[1]), int(sys.argv[2]))
-# else:
-goal = (15, 15)
+if len(sys.argv) >= 3:
+    goal = (int(sys.argv[1]), int(sys.argv[2]))
+else:
+    goal = (15, 15)
 
 
 def run ():
-    global laserMsg, odomMsg, pose, kp, GRID_SIZE
+    global laserMsg, odomMsg, pose, kp, MAP_BL_POSITION, GRID_SIZE
 
     rospy.init_node('move_example', anonymous=True)
     v_pub = rospy.Publisher('cmd_vel', Twist, queue_size=10)
@@ -139,31 +142,31 @@ def run ():
 
         pose_robo = np.array([pose.position.x, pose.position.y])
 
-        pose_robo_grid_i = bound(int(np.floor(pose_robo[1]/GRID_SIZE[2])), 0, GRID_SIZE[0])
-        pose_robo_grid_j = bound(int(np.floor(pose_robo[0]/GRID_SIZE[2])), 0, GRID_SIZE[1])
+        pose_robo_grid_i = bound(int(np.floor((pose_robo[1]-MAP_BL_POSITION[1])/GRID_SIZE[2])), 0, GRID_SIZE[1])
+        pose_robo_grid_j = bound(int(np.floor((pose_robo[0]-MAP_BL_POSITION[0])/GRID_SIZE[2])), 0, GRID_SIZE[0])
 
         for idx, distancia in enumerate(laserMsg.ranges, start=0):
-            if distancia >= laserMsg.range_max:
-                continue
 
             angulo = laserMsg.angle_increment * idx + laserMsg.angle_min
 
             ctrl = np.array([np.cos(theta+angulo), np.sin(theta+angulo)])
             pose_obs = pose_robo + distancia * ctrl
 
-            pose_obs_grid_i = bound(int(np.floor(pose_obs[1]/GRID_SIZE[2])), 0, GRID_SIZE[0])
-            pose_obs_grid_j = bound(int(np.floor(pose_obs[0]/GRID_SIZE[2])), 0, GRID_SIZE[1])
+            pose_obs_grid_i = bound(int(np.floor((pose_obs[1]-MAP_BL_POSITION[1])/GRID_SIZE[2])), 0, GRID_SIZE[1])
+            pose_obs_grid_j = bound(int(np.floor((pose_obs[0]-MAP_BL_POSITION[0])/GRID_SIZE[2])), 0, GRID_SIZE[0])
 
-            for cell in list(bresenham(pose_robo_grid_i, pose_robo_grid_j, pose_obs_grid_i, pose_obs_grid_j))[:-1]:
-                if grid[cell[0],cell[1]] >= 4:
-                    grid[cell[0],cell[1]] -= 4
+            if distancia < laserMsg.range_max or grid[pose_obs_grid_i, pose_obs_grid_j] < 61:
+                for cell in list(bresenham(pose_robo_grid_i, pose_robo_grid_j, pose_obs_grid_i, pose_obs_grid_j))[:-1]:
+                    if grid[cell[0],cell[1]] >= 4:
+                        grid[cell[0],cell[1]] -= 4
+                    else:
+                        grid[cell[0],cell[1]] = 0
+
+            if distancia < laserMsg.range_max:
+                if grid[pose_obs_grid_i, pose_obs_grid_j] <= 93:
+                    grid[pose_obs_grid_i, pose_obs_grid_j] += 7
                 else:
-                    grid[cell[0],cell[1]] = 0
-                    
-            if grid[pose_obs_grid_i, pose_obs_grid_j] <= 93:
-                grid[pose_obs_grid_i, pose_obs_grid_j] += 7
-            else:
-                grid[pose_obs_grid_i, pose_obs_grid_j] = 100
+                    grid[pose_obs_grid_i, pose_obs_grid_j] = 100
             
         
         # ===========[ PUBLICAÇÂO DE MENSAGENS ]=========== #
