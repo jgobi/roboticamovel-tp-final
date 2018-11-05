@@ -16,14 +16,15 @@ import sys
 laserMsg = None
 odomMsg = None
 
-MAP_WIDTH = 16
-MAP_HEIGHT = MAP_WIDTH
-MAP_BL_POSITION = [-8, -8] # posição do canto inferior esquerdo do mapa
+MAP_WIDTH = 300
+MAP_HEIGHT = 160
+MAP_BL_POSITION = [-MAP_WIDTH/2, -MAP_HEIGHT/2] # posição do canto inferior esquerdo do mapa
 
-GRID_RESOLUTION_MULTIPLIER = 7 # nível de detalhe
+MAP_SIDE = int(np.ceil(max(MAP_WIDTH, MAP_HEIGHT)))
+GRID_RESOLUTION_MULTIPLIER = 5 # nível de detalhe
 
 # --- INICIO NÃO EDITAR
-GRID_SIZE = (MAP_WIDTH*GRID_RESOLUTION_MULTIPLIER, MAP_HEIGHT*GRID_RESOLUTION_MULTIPLIER, 1.0/GRID_RESOLUTION_MULTIPLIER) # The last one is the resolution
+GRID_SIZE = (MAP_SIDE*GRID_RESOLUTION_MULTIPLIER, MAP_SIDE*GRID_RESOLUTION_MULTIPLIER, 1.0/GRID_RESOLUTION_MULTIPLIER) # The last one is the resolution
 # --- FIM NÃO EDITAR
 
 laserMsg = None
