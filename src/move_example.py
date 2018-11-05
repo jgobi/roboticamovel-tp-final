@@ -17,7 +17,7 @@ odomMsg = None
 MAP_WIDTH = 16
 MAP_HEIGHT = MAP_WIDTH
 
-GRID_RESOLUTION_MULTIPLIER = 10 # nível de detalhe
+GRID_RESOLUTION_MULTIPLIER = 5 # nível de detalhe
 
 # --- INICIO NÃO EDITAR
 GRID_SIZE = (MAP_WIDTH*GRID_RESOLUTION_MULTIPLIER, MAP_HEIGHT*GRID_RESOLUTION_MULTIPLIER, 1.0/GRID_RESOLUTION_MULTIPLIER) # The last one is the resolution
@@ -145,6 +145,7 @@ def run ():
         for idx, distancia in enumerate(laserMsg.ranges, start=0):
             if distancia >= laserMsg.range_max:
                 continue
+
             angulo = laserMsg.angle_increment * idx + laserMsg.angle_min
 
             ctrl = np.array([np.cos(theta+angulo), np.sin(theta+angulo)])
@@ -153,14 +154,16 @@ def run ():
             pose_obs_grid_i = bound(int(np.floor(pose_obs[1]/GRID_SIZE[2])), 0, GRID_SIZE[0])
             pose_obs_grid_j = bound(int(np.floor(pose_obs[0]/GRID_SIZE[2])), 0, GRID_SIZE[1])
 
-            grid[pose_obs_grid_i, pose_obs_grid_j] = 90
-
             for cell in list(bresenham(pose_robo_grid_i, pose_robo_grid_j, pose_obs_grid_i, pose_obs_grid_j))[:-1]:
-                if grid[cell[0],cell[1]] > 0:
-                    grid[cell[0],cell[1]] -= 1
+                if grid[cell[0],cell[1]] >= 4:
+                    grid[cell[0],cell[1]] -= 4
+                else:
+                    grid[cell[0],cell[1]] = 0
                     
-            if grid[pose_obs_grid_i, pose_obs_grid_j] < 99:
-                grid[pose_obs_grid_i, pose_obs_grid_j] += 2
+            if grid[pose_obs_grid_i, pose_obs_grid_j] <= 93:
+                grid[pose_obs_grid_i, pose_obs_grid_j] += 7
+            else:
+                grid[pose_obs_grid_i, pose_obs_grid_j] = 100
             
         
         # ===========[ PUBLICAÇÂO DE MENSAGENS ]=========== #
