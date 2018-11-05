@@ -6,7 +6,7 @@ from geometry_msgs.msg import Twist
 from sensor_msgs.msg import LaserScan
 from nav_msgs.msg import Odometry, OccupancyGrid
 
-from tf.transformations import euler_from_quaternion
+from tf.transformations import euler_from_quaternion, quaternion_from_euler
 
 import numpy as np
 from bresenham import bresenham
@@ -14,14 +14,13 @@ from bresenham import bresenham
 laserMsg = None
 odomMsg = None
 
-XMIN = -8 # x mínimo do mapa (usualmente (-1)*largura/2)
-YMIN = -8 # y mínimo do mapa (usualmente (-1)*altura/2)
-MAP_RESOLUTION = 1.0 # resolucao do mapa
+MAP_WIDTH = 16
+MAP_HEIGHT = MAP_WIDTH
 
 GRID_RESOLUTION_MULTIPLIER = 10 # nível de detalhe
 
 # --- INICIO NÃO EDITAR
-GRID_SIZE = (np.abs(XMIN*2*GRID_RESOLUTION_MULTIPLIER), np.abs(YMIN*2*GRID_RESOLUTION_MULTIPLIER), MAP_RESOLUTION/GRID_RESOLUTION_MULTIPLIER) # The last one is the resolution
+GRID_SIZE = (MAP_WIDTH*GRID_RESOLUTION_MULTIPLIER, MAP_HEIGHT*GRID_RESOLUTION_MULTIPLIER, 1.0/GRID_RESOLUTION_MULTIPLIER) # The last one is the resolution
 # --- FIM NÃO EDITAR
 
 laserMsg = None
@@ -35,11 +34,11 @@ kp = 0.9
 # if len(sys.argv) >= 3:
 #     goal = (int(sys.argv[1]), int(sys.argv[2]))
 # else:
-goal = (7, 7)
+goal = (15, 15)
 
 
 def run ():
-    global laserMsg, odomMsg, pose, kp, XMIN, YMIN, GRID_SIZE, GRID_RESOLUTION_MULTIPLIER, MAP_RESOLUTION
+    global laserMsg, odomMsg, pose, kp, GRID_SIZE
 
     rospy.init_node('move_example', anonymous=True)
     v_pub = rospy.Publisher('cmd_vel', Twist, queue_size=10)
@@ -51,7 +50,7 @@ def run ():
     occupancy_grid.info.width = int(GRID_SIZE[0])
     occupancy_grid.info.height = int(GRID_SIZE[1])
     occupancy_grid.info.resolution = GRID_SIZE[2]
-    occupancy_grid.data = np.full(GRID_SIZE[0]*GRID_SIZE[1], 50)
+
     cmd_vel = Twist()
 
     grid = np.full((GRID_SIZE[0],GRID_SIZE[1]), 50)
@@ -138,49 +137,35 @@ def run ():
 
         # ===========[ MAPEAMENTO ]=========== #
 
-        pose_vec = np.array([pose.position.x, pose.position.y])
-        
+        pose_robo = np.array([pose.position.x, pose.position.y])
+
+        pose_robo_grid_i = bound(int(np.floor(pose_robo[1]/GRID_SIZE[2])), 0, GRID_SIZE[0])
+        pose_robo_grid_j = bound(int(np.floor(pose_robo[0]/GRID_SIZE[2])), 0, GRID_SIZE[1])
+
         for idx, distancia in enumerate(laserMsg.ranges, start=0):
             if distancia >= laserMsg.range_max:
                 continue
+            angulo = laserMsg.angle_increment * idx + laserMsg.angle_min
 
-            d_vec = np.array([distancia, 0])
+            ctrl = np.array([np.cos(theta+angulo), np.sin(theta+angulo)])
+            pose_obs = pose_robo + distancia * ctrl
 
-            angulo = laserMsg.angle_increment * idx
+            pose_obs_grid_i = bound(int(np.floor(pose_obs[1]/GRID_SIZE[2])), 0, GRID_SIZE[0])
+            pose_obs_grid_j = bound(int(np.floor(pose_obs[0]/GRID_SIZE[2])), 0, GRID_SIZE[1])
 
-            ctrl = np.array([[np.cos(theta+angulo) , np.sin(theta+angulo)],
-                             [-np.sin(theta+angulo), np.cos(theta+angulo)]])
+            grid[pose_obs_grid_i, pose_obs_grid_j] = 90
 
-            # posicao_obstaculo = ctrl.dot(d_vec) + pose_vec
-            posicao_obstaculo = (np.array([distancia*np.cos(theta+angulo), distancia*np.sin(theta+angulo)]) + pose_vec)
-
-            posicao_obstaculo_grid = (np.ceil(1/GRID_SIZE[2] * (posicao_obstaculo - np.array([XMIN, YMIN])*MAP_RESOLUTION)))%160
-
-            print int(posicao_obstaculo_grid[0]), int(posicao_obstaculo_grid[1])
-            grid[int(posicao_obstaculo_grid[0]), int(posicao_obstaculo_grid[1])] = 100
-
-
-            # if posicaoGrid_obstaculo_i < 0 or posicaoGrid_obstaculo_j < 0 or posicaoGrid_obstaculo_i >= GRID_SIZE[0] or posicaoGrid_obstaculo_j >= GRID_SIZE[1]:
-            #     continue
-
-            # for cell in list(bresenham(posicaoGrid_robo_i, posicaoGrid_robo_j, posicaoGrid_obstaculo_i, posicaoGrid_obstaculo_j))[:-1]:
-            #     # print cell
-            #     # print posicaoGrid_robo[0], posicaoGrid_robo[1], posicaoGrid_obstaculo[0], posicaoGrid_obstaculo[1]
-            #     grid[cell[0]-1,cell[1]-1] -= 1
-            #     if grid[cell[0]-1,cell[1]-1] < 0:
-            #         grid[cell[0]-1,cell[1]-1] = 0
+            for cell in list(bresenham(pose_robo_grid_i, pose_robo_grid_j, pose_obs_grid_i, pose_obs_grid_j))[:-1]:
+                if grid[cell[0],cell[1]] > 0:
+                    grid[cell[0],cell[1]] -= 1
                     
-            # grid[posicaoGrid_obstaculo_i-1, posicaoGrid_obstaculo_j-1] += 2
-            # if grid[posicaoGrid_obstaculo_i-1, posicaoGrid_obstaculo_j-1] > 100:
-            #     grid[posicaoGrid_obstaculo_i-1, posicaoGrid_obstaculo_j-1] = 100
-            #print angulo, posicaoGrid
-        # print occupancy_grid
+            if grid[pose_obs_grid_i, pose_obs_grid_j] < 99:
+                grid[pose_obs_grid_i, pose_obs_grid_j] += 2
             
-        print "\n"
-        # v_pub.publish(cmd_vel)
-        # grid[:,15] = 100
-        print GRID_SIZE[0], GRID_SIZE[1], GRID_SIZE[0]*GRID_SIZE[1]
-        occupancy_grid.data = grid.reshape(GRID_SIZE[0]*GRID_SIZE[1])
+        
+        # ===========[ PUBLICAÇÂO DE MENSAGENS ]=========== #
+        v_pub.publish(cmd_vel)
+        occupancy_grid.data = grid.flatten()
         og_pub.publish(occupancy_grid)
         rate.sleep()
 
@@ -192,6 +177,15 @@ def OdomCallback(msg):
     global odomMsg, pose
     odomMsg = msg
     pose = odomMsg.pose.pose
+
+def bound(v, min, max):
+    if v < min:
+        return min
+    elif v > max-1:
+        return max-1
+    else:
+        return v
+
 
 if __name__ == '__main__':
     try:
