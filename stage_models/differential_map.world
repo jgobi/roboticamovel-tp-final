@@ -8,7 +8,7 @@ floorplan
 ( 
     bitmap "bitmaps/cave.png"
     map_resolution 0.032
-    size [16.000 16.000 0.500]
+    size [8.000 8.000 0.500]
     name "cave"
     color "gray50"
     gui_grid 1
