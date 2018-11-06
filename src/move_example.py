@@ -103,7 +103,7 @@ def run ():
                 cmd_vel.linear.y = 0
             elif min(laserMsg.ranges[0:120]) <= 0.7: # se obstáculo a direita, segue em frente
                 cmd_vel.angular.z = 0
-                cmd_vel.linear.x = 0.45
+                cmd_vel.linear.x = 0.575
                 cmd_vel.linear.y = 0
             else: # do contrário, vira pra direita
                 cmd_vel.angular.z = -3.0
