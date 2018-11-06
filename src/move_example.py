@@ -11,17 +11,21 @@ from tf.transformations import euler_from_quaternion, quaternion_from_euler
 import numpy as np
 from bresenham import bresenham
 
+from time import time
+from random import randint
+
 import sys
 
 laserMsg = None
 odomMsg = None
 
-MAP_WIDTH = 300
-MAP_HEIGHT = 160
+MAP_WIDTH = 32
+MAP_HEIGHT = 32
 MAP_BL_POSITION = [-MAP_WIDTH/2, -MAP_HEIGHT/2] # posição do canto inferior esquerdo do mapa
+MAP_TR_POSITION = [MAP_WIDTH/2, MAP_HEIGHT/2] # posição do canto inferior esquerdo do mapa
 
 MAP_SIDE = int(np.ceil(max(MAP_WIDTH, MAP_HEIGHT)))
-GRID_RESOLUTION_MULTIPLIER = 5 # nível de detalhe
+GRID_RESOLUTION_MULTIPLIER = 7 # nível de detalhe
 
 # --- INICIO NÃO EDITAR
 GRID_SIZE = (MAP_SIDE*GRID_RESOLUTION_MULTIPLIER, MAP_SIDE*GRID_RESOLUTION_MULTIPLIER, 1.0/GRID_RESOLUTION_MULTIPLIER) # The last one is the resolution
@@ -36,13 +40,13 @@ kp = 0.9
 
 # ======================[ GOAL ]====================== #
 if len(sys.argv) >= 3:
-    goal = (int(sys.argv[1]), int(sys.argv[2]))
+    goal = np.array([int(sys.argv[1]), int(sys.argv[2])])
 else:
-    goal = (15, 15)
+    goal = np.array([15, 15])
 
 
 def run ():
-    global laserMsg, odomMsg, pose, kp, MAP_BL_POSITION, GRID_SIZE
+    global laserMsg, odomMsg, pose, kp, goal, MAP_BL_POSITION, MAP_TR_POSITION, GRID_SIZE
 
     rospy.init_node('move_example', anonymous=True)
     v_pub = rospy.Publisher('cmd_vel', Twist, queue_size=10)
@@ -58,6 +62,7 @@ def run ():
     cmd_vel = Twist()
 
     grid = np.full((GRID_SIZE[0],GRID_SIZE[1]), 50)
+    inicio_jornada = time()
 
     # ===========[ DESVIO DE OBSTÁCULOS 1 ]=========== #
     desviando = False
@@ -142,6 +147,27 @@ def run ():
         # ===========[ MAPEAMENTO ]=========== #
 
         pose_robo = np.array([pose.position.x, pose.position.y])
+
+        # se o robô chegar no goal, ou se ele não tiver chegado em no máximo 150 segundos, seleciona outro goal
+        if np.all(np.abs(pose_robo-goal) < 0.1) or time()-inicio_jornada > 150:
+            # reinicia máquina de estados de navegação
+            desviando = False
+            girando = True
+            retaParaGoal = [None, None] # [a, b]
+            distanciaParaGoal = None
+
+            # tenta aleatoriamente, no máximo 50 vezes, encontrar um goal na parte não varrida do mapa
+            for i in range(50):
+                goal = np.array([randint(MAP_BL_POSITION[0]+1, MAP_TR_POSITION[0]-1), randint(MAP_BL_POSITION[1]+1, MAP_TR_POSITION[1]-1)])
+                pose_goal_grid_i = bound(int(np.floor((goal[1]-MAP_BL_POSITION[1])/GRID_SIZE[2])), 0, GRID_SIZE[1])
+                pose_goal_grid_j = bound(int(np.floor((goal[0]-MAP_BL_POSITION[0])/GRID_SIZE[2])), 0, GRID_SIZE[0])
+                if grid[pose_goal_grid_i, pose_goal_grid_j] == 50: # se encontrar, pronto, quebra o loop
+                    break
+
+            # reinicia contagem do tempo e printa a nova jornada
+            inicio_jornada = time()
+            print 'nova jornada', goal
+
 
         pose_robo_grid_i = bound(int(np.floor((pose_robo[1]-MAP_BL_POSITION[1])/GRID_SIZE[2])), 0, GRID_SIZE[1])
         pose_robo_grid_j = bound(int(np.floor((pose_robo[0]-MAP_BL_POSITION[0])/GRID_SIZE[2])), 0, GRID_SIZE[0])
