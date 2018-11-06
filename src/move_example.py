@@ -14,7 +14,17 @@ from bresenham import bresenham
 from time import time
 from random import randint
 
+import signal
 import sys
+import subprocess
+
+if len(sys.argv) >= 2:
+    pgm_path = sys.argv[1]
+    if pgm_path[-1] != '/':
+        pgm_path += '/'
+else:
+    pgm_path = './'
+
 
 laserMsg = None
 odomMsg = None
@@ -38,23 +48,18 @@ pose = None
 # ============[ CONSTANTES DO CONTROLE P ]============ #
 kp = 0.9
 
-# ======================[ GOAL ]====================== #
-if len(sys.argv) >= 3:
-    goal = np.array([int(sys.argv[1]), int(sys.argv[2])])
-else:
-    goal = np.array(MAP_BL_POSITION)
-
-
 def run ():
-    global laserMsg, odomMsg, pose, kp, goal, MAP_BL_POSITION, MAP_TR_POSITION, GRID_SIZE
+    global laserMsg, odomMsg, pose, kp, MAP_BL_POSITION, MAP_TR_POSITION, GRID_SIZE
 
     rospy.init_node('move_example', anonymous=True)
     v_pub = rospy.Publisher('cmd_vel', Twist, queue_size=10)
-    og_pub = rospy.Publisher('occupancy_grid', OccupancyGrid, queue_size=10)
+    og_pub = rospy.Publisher('map', OccupancyGrid, queue_size=10)
     rospy.Subscriber('base_scan', LaserScan, LaserCallback)
     rospy.Subscriber('base_pose_ground_truth', Odometry, OdomCallback)
     rate = rospy.Rate(5)
     occupancy_grid = OccupancyGrid()
+    occupancy_grid.header.frame_id = "map"
+    occupancy_grid.header.stamp = rospy.Time.now()
     occupancy_grid.info.width = int(GRID_SIZE[0])
     occupancy_grid.info.height = int(GRID_SIZE[1])
     occupancy_grid.info.resolution = GRID_SIZE[2]
@@ -63,18 +68,41 @@ def run ():
 
     grid = np.full((GRID_SIZE[0],GRID_SIZE[1]), 50)
     inicio_jornada = time()
+    inicio_desviando = time()
+
+    goal = [None]
 
     # ===========[ DESVIO DE OBSTÁCULOS 1 ]=========== #
     desviando = False
     girando = True
     retaParaGoal = [None, None] # [a, b]
     distanciaParaGoal = None
+
+    # ===========[ INTERRUPÇÃO DE CTRL+C ]=========== #
+    def interrupt_ctrl_c(sig, frame):
+        print "\n\n===============[ AGUARDE ]=============="
+        print "Salvando imagens finais e saindo...\n\n"
+        p=subprocess.Popen(['rosrun', 'map_server', 'map_saver', '-f', pgm_path+'mapa'])
+        while p.poll() == None:
+            occupancy_grid.data = grid.flatten()
+            og_pub.publish(occupancy_grid)
+            rate.sleep()
+        p=subprocess.Popen(['rosrun', 'map_server', 'map_saver', '--occ', '16', '--free', '15', '-f', pgm_path+'mapa_threshold'])
+        while p.poll() == None:
+            occupancy_grid.data = grid.flatten()
+            og_pub.publish(occupancy_grid)
+            rate.sleep()
+        sys.exit()
+    signal.signal(signal.SIGINT, interrupt_ctrl_c)
     
     # ===============[ loop principal ]===============
     while not rospy.is_shutdown():
         if odomMsg == None or laserMsg == None:
             rate.sleep()
             continue
+        elif goal[0] == None:
+            goal = np.array(MAP_TR_POSITION) - laserMsg.range_max + 3
+            
         
         # conversão de quatérnio para rollPitchYaw
         quaternion = (
@@ -95,17 +123,25 @@ def run ():
 
 
         # ===========[ DESVIO DE OBSTÁCULOS 2 ]=========== #
-
         if desviando:
             if min(laserMsg.ranges[110:250]) <= 0.7: # se obstáculo a frente, gira pra esquerda
+                if time() - inicio_desviando > 5:
+                    print 'parei de girar'
+                    desviando = False
+                    girando = True
                 cmd_vel.angular.z = 3.0
                 cmd_vel.linear.x = 0
                 cmd_vel.linear.y = 0
             elif min(laserMsg.ranges[0:120]) <= 0.7: # se obstáculo a direita, segue em frente
+                inicio_desviando = time()
                 cmd_vel.angular.z = 0
                 cmd_vel.linear.x = 0.575
                 cmd_vel.linear.y = 0
             else: # do contrário, vira pra direita
+                if time() - inicio_desviando > 5:
+                    print 'parei de girar'
+                    desviando = False
+                    girando = True
                 cmd_vel.angular.z = -3.0
                 cmd_vel.linear.x = 0.05
                 cmd_vel.linear.y = 0
@@ -137,6 +173,7 @@ def run ():
             distanciaParaGoal = distanciaEuclidiana
             # começa a desviar do obstáculo
             desviando = True
+            inicio_desviando = time()
 
         else: # movimento normal
             cmd_vel.angular.z = kp*erro[2]
@@ -150,6 +187,11 @@ def run ():
 
         # se o robô chegar no goal, ou se ele não tiver chegado em no máximo 150 segundos, seleciona outro goal
         if np.all(np.abs(pose_robo-goal) < 0.1) or time()-inicio_jornada > 150:
+
+            # salva mapa
+            print "Salvando PGM parcial"
+            subprocess.Popen(['rosrun', 'map_server', 'map_saver', '-f', pgm_path+'mapa'])
+
             # reinicia máquina de estados de navegação
             desviando = False
             girando = True
@@ -225,4 +267,3 @@ if __name__ == '__main__':
         run()
     except rospy.ROSInterruptException:
         pass
-
