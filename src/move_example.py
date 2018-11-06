@@ -42,7 +42,7 @@ kp = 0.9
 if len(sys.argv) >= 3:
     goal = np.array([int(sys.argv[1]), int(sys.argv[2])])
 else:
-    goal = np.array([15, 15])
+    goal = np.array(MAP_BL_POSITION)
 
 
 def run ():
@@ -97,11 +97,11 @@ def run ():
         # ===========[ DESVIO DE OBSTÁCULOS 2 ]=========== #
 
         if desviando:
-            if min(laserMsg.ranges[110:250]) <= 0.53: # se obstáculo a frente, gira pra esquerda
+            if min(laserMsg.ranges[110:250]) <= 0.7: # se obstáculo a frente, gira pra esquerda
                 cmd_vel.angular.z = 3.0
                 cmd_vel.linear.x = 0
                 cmd_vel.linear.y = 0
-            elif min(laserMsg.ranges[0:120]) <= 0.53: # se obstáculo a direita, segue em frente
+            elif min(laserMsg.ranges[0:120]) <= 0.7: # se obstáculo a direita, segue em frente
                 cmd_vel.angular.z = 0
                 cmd_vel.linear.x = 0.45
                 cmd_vel.linear.y = 0
@@ -132,7 +132,7 @@ def run ():
                     retaParaGoal[1] = goal[1] - (retaParaGoal[0]*goal[0])
                     distanciaParaGoal = distanciaEuclidiana
 
-        elif min(laserMsg.ranges[110:250]) <= 0.53 and distanciaEuclidiana > 0.3: # obstáculo à frente
+        elif min(laserMsg.ranges[110:250]) <= 0.7 and distanciaEuclidiana > 0.35: # obstáculo à frente
             # salva hit point
             distanciaParaGoal = distanciaEuclidiana
             # começa a desviar do obstáculo
