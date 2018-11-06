@@ -29,15 +29,20 @@ else:
 laserMsg = None
 odomMsg = None
 
-MAP_WIDTH = 32
-MAP_HEIGHT = 32
+MAP_WIDTH = 16
+MAP_HEIGHT = 16
 MAP_BL_POSITION = [-MAP_WIDTH/2, -MAP_HEIGHT/2] # posição do canto inferior esquerdo do mapa
 MAP_TR_POSITION = [MAP_WIDTH/2, MAP_HEIGHT/2] # posição do canto inferior esquerdo do mapa
 
 MAP_SIDE = int(np.ceil(max(MAP_WIDTH, MAP_HEIGHT)))
-GRID_RESOLUTION_MULTIPLIER = 7 # nível de detalhe
+GRID_RESOLUTION_MULTIPLIER = 10 # nível de detalhe
 
 # --- INICIO NÃO EDITAR
+
+LOG_0 = 35
+LOG_ODDS_FREE = 40
+LOG_ODDS_OCC  = 60
+
 GRID_SIZE = (MAP_SIDE*GRID_RESOLUTION_MULTIPLIER, MAP_SIDE*GRID_RESOLUTION_MULTIPLIER, 1.0/GRID_RESOLUTION_MULTIPLIER) # The last one is the resolution
 # --- FIM NÃO EDITAR
 
@@ -226,14 +231,14 @@ def run ():
 
             if distancia < laserMsg.range_max or grid[pose_obs_grid_i, pose_obs_grid_j] < 61:
                 for cell in list(bresenham(pose_robo_grid_i, pose_robo_grid_j, pose_obs_grid_i, pose_obs_grid_j))[:-1]:
-                    if grid[cell[0],cell[1]] >= 4:
-                        grid[cell[0],cell[1]] -= 4
+                    if grid[cell[0],cell[1]] >= (LOG_ODDS_FREE - LOG_0):
+                        grid[cell[0],cell[1]] -= (LOG_ODDS_FREE - LOG_0)
                     else:
                         grid[cell[0],cell[1]] = 0
 
             if distancia < laserMsg.range_max:
-                if grid[pose_obs_grid_i, pose_obs_grid_j] <= 93:
-                    grid[pose_obs_grid_i, pose_obs_grid_j] += 7
+                if grid[pose_obs_grid_i, pose_obs_grid_j] <= 100-(LOG_ODDS_FREE - LOG_0):
+                    grid[pose_obs_grid_i, pose_obs_grid_j] += (LOG_ODDS_FREE - LOG_0)
                 else:
                     grid[pose_obs_grid_i, pose_obs_grid_j] = 100
             
