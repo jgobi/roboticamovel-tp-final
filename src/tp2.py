@@ -18,6 +18,7 @@ import signal
 import sys
 import subprocess
 
+# Obtenção do path para salvar as imagens de saída do mapa
 if len(sys.argv) >= 2:
     pgm_path = sys.argv[1]
     if pgm_path[-1] != '/':
@@ -26,35 +27,37 @@ else:
     pgm_path = './'
 
 
-laserMsg = None
-odomMsg = None
+# ============[ DEFINIÇÕES DO USUÁRIO - NAVEGAÇÃO ]============ #
+kp = 0.9 # gain proporcional
 
-MAP_WIDTH = 16
-MAP_HEIGHT = 16
+# ============[ DEFINIÇÕES DO USUÁRIO - MEPEAMENTO ]============ #
+
+MAP_WIDTH = 16 # largura do mapa
+MAP_HEIGHT = 16 # altura do mapa
 MAP_BL_POSITION = [-MAP_WIDTH/2, -MAP_HEIGHT/2] # posição do canto inferior esquerdo do mapa
 MAP_TR_POSITION = [MAP_WIDTH/2, MAP_HEIGHT/2] # posição do canto inferior esquerdo do mapa
 
-MAP_SIDE = int(np.ceil(max(MAP_WIDTH, MAP_HEIGHT)))
-GRID_RESOLUTION_MULTIPLIER = 10 # nível de detalhe
+GRID_RESOLUTION_MULTIPLIER = 10 # nível de detalhe do mapa. quanto maior, mais subdividido o grid
 
-# --- INICIO NÃO EDITAR
 
-LOG_0 = 35
-LOG_ODDS_FREE = 40
-LOG_ODDS_OCC  = 60
+LOG_0 = 35 # constante l_0
+LOG_ODDS_FREE = 40 # constante l_{free}
+LOG_ODDS_OCC  = 60 # constante l_{occ}
 
+# ============[ INICIALIZAÇÕES 1 ]============ #
+
+MAP_SIDE = int(np.ceil(max(MAP_WIDTH, MAP_HEIGHT))) # o mapa precisa ser quadrado para o algoritmo funcionar bem
 GRID_SIZE = (MAP_SIDE*GRID_RESOLUTION_MULTIPLIER, MAP_SIDE*GRID_RESOLUTION_MULTIPLIER, 1.0/GRID_RESOLUTION_MULTIPLIER) # The last one is the resolution
-# --- FIM NÃO EDITAR
 
 laserMsg = None
 odomMsg = None
 pose = None
 
-# ============[ CONSTANTES DO CONTROLE P ]============ #
-kp = 0.9
 
 def run ():
     global laserMsg, odomMsg, pose, kp, MAP_BL_POSITION, MAP_TR_POSITION, GRID_SIZE
+
+    # ============[ INICIALIZAÇÕES 2 ]============ #
 
     rospy.init_node('move_example', anonymous=True)
     v_pub = rospy.Publisher('cmd_vel', Twist, queue_size=10)
@@ -71,19 +74,21 @@ def run ():
 
     cmd_vel = Twist()
 
+    goal = np.array(MAP_TR_POSITION)
+    print 'Pressione CTRL+C para salvar o mapa de ocupação final com e sem threshold e depois sair'
+
+    # mapeamento
     grid = np.full((GRID_SIZE[0],GRID_SIZE[1]), 50)
     inicio_jornada = time()
     inicio_desviando = time()
 
-    goal = [None]
-
-    # ===========[ DESVIO DE OBSTÁCULOS 1 ]=========== #
+    # desvio de obstáculos
     desviando = False
     girando = True
     retaParaGoal = [None, None] # [a, b]
     distanciaParaGoal = None
 
-    # ===========[ INTERRUPÇÃO DE CTRL+C ]=========== #
+    # ===========[ SALVAR IMAGEM FINAL AO CTRL+C (SIGINT) ]=========== #
     def interrupt_ctrl_c(sig, frame):
         print "\n\n===============[ AGUARDE ]=============="
         print "Salvando imagens finais e saindo...\n\n"
@@ -98,16 +103,14 @@ def run ():
             og_pub.publish(occupancy_grid)
             rate.sleep()
         sys.exit()
+    # Event listener para o SIGPOINT
     signal.signal(signal.SIGINT, interrupt_ctrl_c)
     
     # ===============[ loop principal ]===============
     while not rospy.is_shutdown():
         if odomMsg == None or laserMsg == None:
             rate.sleep()
-            continue
-        elif goal[0] == None:
-            goal = np.array(MAP_TR_POSITION) - laserMsg.range_max + 3
-            
+            continue            
         
         # conversão de quatérnio para rollPitchYaw
         quaternion = (
@@ -118,6 +121,9 @@ def run ():
         rollPitchYaw = euler_from_quaternion(quaternion)
         theta = rollPitchYaw[2] # Yaw
 
+
+        # ===========[ NAVEGAÇÃO ]=========== #
+
         erroU = (goal[0]-pose.position.x, goal[1]-pose.position.y) # erro em referência ao sistema universal
         theta2 = np.arctan2(erroU[1], erroU[0]) # ângulo entre o x universal e o vetor para o goal
 
@@ -127,11 +133,11 @@ def run ():
         erro = (distanciaEuclidiana*erroCos, distanciaEuclidiana*erroSen, theta2-theta) # erro em referência ao sistema do robo
 
 
-        # ===========[ DESVIO DE OBSTÁCULOS 2 ]=========== #
+        # ----------[ DESVIO DE OBSTÁCULOS ]---------- #
         if desviando:
             if min(laserMsg.ranges[110:250]) <= 0.7: # se obstáculo a frente, gira pra esquerda
-                if time() - inicio_desviando > 5:
-                    print 'parei de girar'
+                if time() - inicio_desviando > 5: # se está girando sem controle a mais de 5 segundos
+                    # reseta a máquina de estados
                     desviando = False
                     girando = True
                 cmd_vel.angular.z = 3.0
@@ -143,8 +149,8 @@ def run ():
                 cmd_vel.linear.x = 0.575
                 cmd_vel.linear.y = 0
             else: # do contrário, vira pra direita
-                if time() - inicio_desviando > 5:
-                    print 'parei de girar'
+                if time() - inicio_desviando > 5: # se está girando sem controle a mais de 5 segundos
+                    # reseta a máquina de estados
                     desviando = False
                     girando = True
                 cmd_vel.angular.z = -3.0
