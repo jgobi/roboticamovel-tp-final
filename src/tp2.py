@@ -30,8 +30,8 @@ else:
 # ============[ DEFINIÇÕES DO USUÁRIO - NAVEGAÇÃO ]============ #
 kp = 0.9 # gain proporcional
 
-# ============[ DEFINIÇÕES DO USUÁRIO - MEPEAMENTO ]============ #
 
+# ============[ DEFINIÇÕES DO USUÁRIO - MEPEAMENTO ]============ #
 MAP_WIDTH = 16 # largura do mapa
 MAP_HEIGHT = 16 # altura do mapa
 MAP_BL_POSITION = [-MAP_WIDTH/2, -MAP_HEIGHT/2] # posição do canto inferior esquerdo do mapa
@@ -44,8 +44,8 @@ LOG_0 = 35 # constante l_0
 LOG_ODDS_FREE = 40 # constante l_{free}
 LOG_ODDS_OCC  = 60 # constante l_{occ}
 
-# ============[ INICIALIZAÇÕES 1 ]============ #
 
+# ============[ INICIALIZAÇÕES 1 ]============ #
 MAP_SIDE = int(np.ceil(max(MAP_WIDTH, MAP_HEIGHT))) # o mapa precisa ser quadrado para o algoritmo funcionar bem
 GRID_SIZE = (MAP_SIDE*GRID_RESOLUTION_MULTIPLIER, MAP_SIDE*GRID_RESOLUTION_MULTIPLIER, 1.0/GRID_RESOLUTION_MULTIPLIER) # The last one is the resolution
 
@@ -54,58 +54,103 @@ odomMsg = None
 pose = None
 
 
+
+# ============[ INICIO FUNÇÕES AUXILIARES ]============ #
+
+def LaserCallback(msg):
+    global laserMsg
+    laserMsg = msg
+
+def OdomCallback(msg):
+    global odomMsg, pose
+    odomMsg = msg
+    pose = odomMsg.pose.pose
+
+"""
+Recebe um valor e um limite inferior e superior e retorna o próprio valor
+ou um dos limites, caso o valor não esteja entre eles.
+O limite é inclusivo no mínimo e exclusivo no máximo.
+"""
+def bound(v, min, max):
+    if v < min:
+        return min
+    elif v > max-1:
+        return max-1
+    else:
+        return v
+
+# ===========[ SALVAR IMAGEM FINAL AO CTRL+C (SIGINT) ]=========== #
+def interrupt_ctrl_c (sig, frame):
+    global grid, occupancy_grid
+    print "\n\n===============[ AGUARDE ]=============="
+    print "Salvando imagens finais e saindo...\n\n"
+    # roda map_saver
+    p=subprocess.Popen(['rosrun', 'map_server', 'map_saver', '-f', pgm_path+'mapa'])
+    # continua enviando mensagens enquanto o map_saver estiver ouvindo
+    while p.poll() == None:
+        occupancy_grid.data = grid.flatten()
+        og_pub.publish(occupancy_grid)
+        rate.sleep()
+    
+    # roda map_saver para imagem binária (valor célula <= 15 = livre, do contrário, ocupada)
+    p=subprocess.Popen(['rosrun', 'map_server', 'map_saver', '--occ', '16', '--free', '15', '-f', pgm_path+'mapa_threshold'])
+    # continua enviando mensagens enquanto o map_saver estiver ouvindo
+    while p.poll() == None:
+        occupancy_grid.data = grid.flatten()
+        og_pub.publish(occupancy_grid)
+        rate.sleep()
+    
+    # encerra a execução do programa
+    sys.exit()
+
+
+
+# ============[ FIM FUNÇÕES AUXILIARES ]============ #
+
+
+# ============[ INICIALIZAÇÕES 2 ]============ #
+rospy.init_node('tp2', anonymous=True)
+v_pub = rospy.Publisher('cmd_vel', Twist, queue_size=10)
+og_pub = rospy.Publisher('map', OccupancyGrid, queue_size=10)
+rospy.Subscriber('base_scan', LaserScan, LaserCallback)
+rospy.Subscriber('base_pose_ground_truth', Odometry, OdomCallback)
+rate = rospy.Rate(5)
+occupancy_grid = OccupancyGrid()
+occupancy_grid.header.frame_id = "map"
+occupancy_grid.header.stamp = rospy.Time.now()
+occupancy_grid.info.width = int(GRID_SIZE[0])
+occupancy_grid.info.height = int(GRID_SIZE[1])
+occupancy_grid.info.resolution = GRID_SIZE[2]
+
+cmd_vel = Twist()
+
+grid = np.full((GRID_SIZE[0],GRID_SIZE[1]), 50)
+
+goal = np.array(MAP_TR_POSITION)
+print 'Pressione CTRL+C para salvar o mapa de ocupação final com e sem threshold e depois sair'
+
+
+
+# ============[ FUNÇÃO DE LOOP ]============ #
 def run ():
-    global laserMsg, odomMsg, pose, kp, MAP_BL_POSITION, MAP_TR_POSITION, GRID_SIZE
+    global goal, grid, cmd_vel, occupancy_grid
 
-    # ============[ INICIALIZAÇÕES 2 ]============ #
 
-    rospy.init_node('move_example', anonymous=True)
-    v_pub = rospy.Publisher('cmd_vel', Twist, queue_size=10)
-    og_pub = rospy.Publisher('map', OccupancyGrid, queue_size=10)
-    rospy.Subscriber('base_scan', LaserScan, LaserCallback)
-    rospy.Subscriber('base_pose_ground_truth', Odometry, OdomCallback)
-    rate = rospy.Rate(5)
-    occupancy_grid = OccupancyGrid()
-    occupancy_grid.header.frame_id = "map"
-    occupancy_grid.header.stamp = rospy.Time.now()
-    occupancy_grid.info.width = int(GRID_SIZE[0])
-    occupancy_grid.info.height = int(GRID_SIZE[1])
-    occupancy_grid.info.resolution = GRID_SIZE[2]
+    # Event listener para o SIGINT
+    signal.signal(signal.SIGINT, interrupt_ctrl_c)
 
-    cmd_vel = Twist()
-
-    goal = np.array(MAP_TR_POSITION)
-    print 'Pressione CTRL+C para salvar o mapa de ocupação final com e sem threshold e depois sair'
-
-    # mapeamento
-    grid = np.full((GRID_SIZE[0],GRID_SIZE[1]), 50)
+    # ============[ mapeamento ]============ #
     inicio_jornada = time()
-    inicio_desviando = time()
 
-    # desvio de obstáculos
-    desviando = False
-    girando = True
+
+    # ============[ navegacao ]============ #
+    inicio_desviando = time()
+    desviando = False # variável de estado
+    girando = True    # variável de estado
     retaParaGoal = [None, None] # [a, b]
     distanciaParaGoal = None
 
-    # ===========[ SALVAR IMAGEM FINAL AO CTRL+C (SIGINT) ]=========== #
-    def interrupt_ctrl_c(sig, frame):
-        print "\n\n===============[ AGUARDE ]=============="
-        print "Salvando imagens finais e saindo...\n\n"
-        p=subprocess.Popen(['rosrun', 'map_server', 'map_saver', '-f', pgm_path+'mapa'])
-        while p.poll() == None:
-            occupancy_grid.data = grid.flatten()
-            og_pub.publish(occupancy_grid)
-            rate.sleep()
-        p=subprocess.Popen(['rosrun', 'map_server', 'map_saver', '--occ', '16', '--free', '15', '-f', pgm_path+'mapa_threshold'])
-        while p.poll() == None:
-            occupancy_grid.data = grid.flatten()
-            og_pub.publish(occupancy_grid)
-            rate.sleep()
-        sys.exit()
-    # Event listener para o SIGPOINT
-    signal.signal(signal.SIGINT, interrupt_ctrl_c)
-    
+
     # ===============[ loop principal ]===============
     while not rospy.is_shutdown():
         if odomMsg == None or laserMsg == None:
@@ -123,7 +168,6 @@ def run ():
 
 
         # ===========[ NAVEGAÇÃO ]=========== #
-
         erroU = (goal[0]-pose.position.x, goal[1]-pose.position.y) # erro em referência ao sistema universal
         theta2 = np.arctan2(erroU[1], erroU[0]) # ângulo entre o x universal e o vetor para o goal
 
@@ -132,11 +176,10 @@ def run ():
         distanciaEuclidiana = np.sqrt(erroU[0]**2 + erroU[1]**2)
         erro = (distanciaEuclidiana*erroCos, distanciaEuclidiana*erroSen, theta2-theta) # erro em referência ao sistema do robo
 
-
-        # ----------[ DESVIO DE OBSTÁCULOS ]---------- #
-        if desviando:
+        if desviando: # estado de navegação
+            # ----------[ DESVIO DE OBSTÁCULOS ]---------- #
             if min(laserMsg.ranges[110:250]) <= 0.7: # se obstáculo a frente, gira pra esquerda
-                if time() - inicio_desviando > 5: # se está girando sem controle a mais de 5 segundos
+                if time() - inicio_desviando > 5: # se robô está girando sem controle a mais de 5 segundos
                     # reseta a máquina de estados
                     desviando = False
                     girando = True
@@ -149,7 +192,7 @@ def run ():
                 cmd_vel.linear.x = 0.575
                 cmd_vel.linear.y = 0
             else: # do contrário, vira pra direita
-                if time() - inicio_desviando > 5: # se está girando sem controle a mais de 5 segundos
+                if time() - inicio_desviando > 5: # se robô está girando sem controle a mais de 5 segundos
                     # reseta a máquina de estados
                     desviando = False
                     girando = True
@@ -167,7 +210,8 @@ def run ():
                 desviando = False
                 girando = True
 
-        elif girando:
+        elif girando: # estado de navegação
+            # ----------[ GIRA PARA FICAR EM DIREÇÃO AO GOAL ]---------- #
             # acerta o ângulo
             cmd_vel.angular.z = kp*erro[2]
             cmd_vel.linear.x = 0
@@ -198,12 +242,12 @@ def run ():
 
         # se o robô chegar no goal, ou se ele não tiver chegado em no máximo 150 segundos, seleciona outro goal
         if np.all(np.abs(pose_robo-goal) < 0.1) or time()-inicio_jornada > 150:
-
+            # ----------[ SALVAMENTO DE MAPA E MUDANÇA DE GOAL ]---------- #
             # salva mapa
             print "Salvando PGM parcial"
             subprocess.Popen(['rosrun', 'map_server', 'map_saver', '-f', pgm_path+'mapa'])
 
-            # reinicia máquina de estados de navegação
+            # reinicia estados de navegação
             desviando = False
             girando = True
             retaParaGoal = [None, None] # [a, b]
@@ -214,7 +258,7 @@ def run ():
                 goal = np.array([randint(MAP_BL_POSITION[0]+1, MAP_TR_POSITION[0]-1), randint(MAP_BL_POSITION[1]+1, MAP_TR_POSITION[1]-1)])
                 pose_goal_grid_i = bound(int(np.floor((goal[1]-MAP_BL_POSITION[1])/GRID_SIZE[2])), 0, GRID_SIZE[1])
                 pose_goal_grid_j = bound(int(np.floor((goal[0]-MAP_BL_POSITION[0])/GRID_SIZE[2])), 0, GRID_SIZE[0])
-                if grid[pose_goal_grid_i, pose_goal_grid_j] == 50: # se encontrar, pronto, quebra o loop
+                if grid[pose_goal_grid_i, pose_goal_grid_j] == 50: # se encontrar, quebra o loop
                     break
 
             # reinicia contagem do tempo e printa a nova jornada
@@ -254,23 +298,6 @@ def run ():
         occupancy_grid.data = grid.flatten()
         og_pub.publish(occupancy_grid)
         rate.sleep()
-
-def LaserCallback(msg):
-    global laserMsg
-    laserMsg = msg
-
-def OdomCallback(msg):
-    global odomMsg, pose
-    odomMsg = msg
-    pose = odomMsg.pose.pose
-
-def bound(v, min, max):
-    if v < min:
-        return min
-    elif v > max-1:
-        return max-1
-    else:
-        return v
 
 
 if __name__ == '__main__':
