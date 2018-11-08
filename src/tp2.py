@@ -40,9 +40,8 @@ MAP_TR_POSITION = [MAP_WIDTH/2, MAP_HEIGHT/2] # posição do canto inferior esqu
 GRID_RESOLUTION_MULTIPLIER = 10 # nível de detalhe do mapa. quanto maior, mais subdividido o grid
 
 
-LOG_0 = 35 # constante l_0
-LOG_ODDS_FREE = 40 # constante l_{free}
-LOG_ODDS_OCC  = 60 # constante l_{occ}
+LOG_ODDS_FREE = 5 # constante l_{free} - l_0 = 40 - 35
+LOG_ODDS_OCC  = 25 # constante l_{occ} - l_0 = 60 - 35
 
 
 # ============[ INICIALIZAÇÕES 1 ]============ #
@@ -266,29 +265,45 @@ def run ():
             print 'nova jornada', goal
 
 
+        # pose do robo na grid
         pose_robo_grid_i = bound(int(np.floor((pose_robo[1]-MAP_BL_POSITION[1])/GRID_SIZE[2])), 0, GRID_SIZE[1])
         pose_robo_grid_j = bound(int(np.floor((pose_robo[0]-MAP_BL_POSITION[0])/GRID_SIZE[2])), 0, GRID_SIZE[0])
 
+        # itera nos ranges do laser
         for idx, distancia in enumerate(laserMsg.ranges, start=0):
 
             angulo = laserMsg.angle_increment * idx + laserMsg.angle_min
 
+            # calculo da posição do obstáculo
             ctrl = np.array([np.cos(theta+angulo), np.sin(theta+angulo)])
             pose_obs = pose_robo + distancia * ctrl
 
+            # calculo da posição do obstáculo na grid
             pose_obs_grid_i = bound(int(np.floor((pose_obs[1]-MAP_BL_POSITION[1])/GRID_SIZE[2])), 0, GRID_SIZE[1])
             pose_obs_grid_j = bound(int(np.floor((pose_obs[0]-MAP_BL_POSITION[0])/GRID_SIZE[2])), 0, GRID_SIZE[0])
 
+            """
+            Para agilizar o mapeamento, mesmo se o sensor não detectar um obstáculo, suas informações são usadas
+            para formar um mapa. Nesse caso, considera-se que se ele não encontrou um obstáculo no seu range máximo,
+            então todas as células estão livres.
+            Porém, para evitar que isso atrapalhe em alguma célula já dada como ocupada, o acima só é feito caso
+            a célula dada como "obstáculo" (ou seja, a célula coincidente com a posição máxima alcançada pelo laser)
+            não esteja com probabilidade alta de ser ocupada. Aqui, foi usado o número máximo 61.
+            """
+
             if distancia < laserMsg.range_max or grid[pose_obs_grid_i, pose_obs_grid_j] < 61:
+                # para cada célula da linha de bresenham que liga a pose do robô no grid à pose obstáculo no grid
+                # decremente log_odds_free
                 for cell in list(bresenham(pose_robo_grid_i, pose_robo_grid_j, pose_obs_grid_i, pose_obs_grid_j))[:-1]:
-                    if grid[cell[0],cell[1]] >= (LOG_ODDS_FREE - LOG_0):
-                        grid[cell[0],cell[1]] -= (LOG_ODDS_FREE - LOG_0)
+                    if grid[cell[0],cell[1]] >= LOG_ODDS_FREE: # evita que o número fique negativo
+                        grid[cell[0],cell[1]] -= LOG_ODDS_FREE
                     else:
                         grid[cell[0],cell[1]] = 0
 
+            # se aplicável, incremente log_odds_occ na célula do grid equivalente à pose do obstáculo
             if distancia < laserMsg.range_max:
-                if grid[pose_obs_grid_i, pose_obs_grid_j] <= 100-(LOG_ODDS_FREE - LOG_0):
-                    grid[pose_obs_grid_i, pose_obs_grid_j] += (LOG_ODDS_FREE - LOG_0)
+                if grid[pose_obs_grid_i, pose_obs_grid_j] <= 100-LOG_ODDS_OCC: # evita que o número passe de 100
+                    grid[pose_obs_grid_i, pose_obs_grid_j] += LOG_ODDS_OCC
                 else:
                     grid[pose_obs_grid_i, pose_obs_grid_j] = 100
             
