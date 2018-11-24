@@ -1,7 +1,7 @@
 <launch>
   <!-- Name of the world file to use -->
-  <arg name="world_file"     default="$(find tp2)stage_models/holonomic_map.world"/>
-  <arg name="rviz_file"     default="$(find tp2)default.rviz"/>
+  <arg name="world_file"     default="$(find tpf)stage_models/holonomic_map.world"/>
+  <arg name="rviz_file"     default="$(find tpf)default.rviz"/>
   <param name="/use_sim_time" value="true"/>
 
   <!--  ******************** Stage ********************  -->
