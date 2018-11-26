@@ -111,7 +111,7 @@ def run ():
         ready = True
         print "Quaaase"
         for bot in robots:
-            if not bot.step(grid):
+            if not bot.do_navigation():
                 ready = False
             break
         if ready:
@@ -130,7 +130,8 @@ def run ():
                 bot.set_goal(goal.x, goal.y)
                 bot.inicio_jornada = time()
                 print "Uma nova jornada para o robô "+str(i)+" começou!", goal.x, goal.y
-            bot.step(grid)
+            bot.do_navigation()
+            bot.do_mapping(grid)
         
         if time() - salvamento_mapa > 15:
             salva_mapa()

@@ -18,6 +18,8 @@ import subprocess
 
 from utils import Ponto, bound
 
+from srt import SRT, Point
+
 #======================= REMOVER
 
 
@@ -53,6 +55,7 @@ class Robot:
         self.laser_msg = None
         self.odom_msg = None
         self.pose = None
+        self.theta = None
 
         self.navegando = False
 
@@ -74,9 +77,12 @@ class Robot:
 
         self.chegou_goal = True
 
+        self.ready = False
+        self.T = None
+
 
     # ===============[ loop principal ]===============
-    def step(self, grid):
+    def do_bug2(self):
         if self.odom_msg == None or self.laser_msg == None or not self.navegando:
             return False
         
@@ -87,17 +93,17 @@ class Robot:
             self.pose.orientation.z,
             self.pose.orientation.w)
         rollPitchYaw = euler_from_quaternion(quaternion)
-        theta = rollPitchYaw[2] # Yaw
+        self.theta = rollPitchYaw[2] # Yaw
 
 
         # ===========[ NAVEGAÇÃO ]=========== #
         erroU = (self.goal.x-self.pose.position.x, self.goal.y-self.pose.position.y) # erro em referência ao sistema universal
         theta2 = np.arctan2(erroU[1], erroU[0]) # ângulo entre o x universal e o vetor para o goal
 
-        erroCos = np.cos(theta2-theta) # cosseno do ângulo entre o sistema do robô e o vetor para o goal
-        erroSen = np.sin(theta2-theta) # seno do ângulo entre o sistema do robô e o vetor para o goal
+        erroCos = np.cos(theta2-self.theta) # cosseno do ângulo entre o sistema do robô e o vetor para o goal
+        erroSen = np.sin(theta2-self.theta) # seno do ângulo entre o sistema do robô e o vetor para o goal
         distanciaEuclidiana = np.sqrt(erroU[0]**2 + erroU[1]**2)
-        erro = (distanciaEuclidiana*erroCos, distanciaEuclidiana*erroSen, theta2-theta) # erro em referência ao sistema do robo
+        erro = (distanciaEuclidiana*erroCos, distanciaEuclidiana*erroSen, theta2-self.theta) # erro em referência ao sistema do robo
 
         if self.desviando: # estado de navegação
             # ----------[ DESVIO DE OBSTÁCULOS ]---------- #
@@ -160,6 +166,28 @@ class Robot:
 
         self.v_pub.publish(self.cmd_vel)
 
+        return True
+
+
+    # Exige um laser de 360 graus
+    def do_navigation(self):
+        
+        if self.odom_msg == None or self.laser_msg == None or not self.navegando:
+            return False
+        if not self.ready:
+            self.ready = True
+            menores_raios = []
+            ang_min = np.rad2deg(self.laser_msg.angle_min)
+            feixes_por_setor = len(self.laser_msg.ranges)/12
+            for i in range(12):
+                start = i*feixes_por_setor
+                menores_raios.append(np.min(self.laser_msg.ranges[start:start+feixes_por_setor]))
+            self.T = SRT(Point(self.pose.position.x, self.pose.position.y), menores_raios)
+
+        pass
+
+    
+    def do_mapping(self, grid):
         # ===========[ MAPEAMENTO ]=========== #
         self.pose_robo = np.array([self.pose.position.x, self.pose.position.y])
 
@@ -176,7 +204,7 @@ class Robot:
             angulo = self.laser_msg.angle_increment * idx + self.laser_msg.angle_min
 
             # calculo da posição do obstáculo
-            ctrl = np.array([np.cos(theta+angulo), np.sin(theta+angulo)])
+            ctrl = np.array([np.cos(self.theta+angulo), np.sin(self.theta+angulo)])
             self.pose_obs = self.pose_robo + distancia * ctrl
 
             # calculo da posição do obstáculo na grid
@@ -207,8 +235,7 @@ class Robot:
                     grid[self.pose_obs_grid_i, self.pose_obs_grid_j] += LOG_ODDS_OCC
                 else:
                     grid[self.pose_obs_grid_i, self.pose_obs_grid_j] = 100
-        return True
-
+    
     def laser_callback (self, msg):
         self.laser_msg = msg
 
