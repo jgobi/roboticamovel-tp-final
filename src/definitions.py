@@ -3,7 +3,7 @@
 
 from numpy import ceil
 
-NUMERO_ROBOS = 4
+NUMERO_ROBOS = 6
 
 # ============[ DEFINIÇÕES DO USUÁRIO - MEPEAMENTO ]============ #
 MAP_WIDTH = 32 # largura do mapa
@@ -15,7 +15,7 @@ GRID_RESOLUTION_MULTIPLIER = 10 # nível de detalhe do mapa. quanto maior, mais 
 
 
 LOG_ODDS_FREE = 5 # constante l_{free} - l_0 = 40 - 35
-LOG_ODDS_OCC  = 25 # constante l_{occ} - l_0 = 60 - 35
+LOG_ODDS_OCC  = 9 # constante l_{occ} - l_0 = 60 - 35
 
 
 # ============[ INICIALIZAÇÕES 1 ]============ #

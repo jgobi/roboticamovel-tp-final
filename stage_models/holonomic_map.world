@@ -34,3 +34,11 @@ roomba(
     name "holonomic_robot"
     pose [15 15 0 0]
 )
+roomba(
+    name "holonomic_robot"
+    pose [-3 0 0 0]
+)
+roomba(
+    name "holonomic_robot"
+    pose [12 -5 0 0]
+)

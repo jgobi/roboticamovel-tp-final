@@ -33,6 +33,9 @@ from definitions import NUMERO_ROBOS, MAP_WIDTH, MAP_HEIGHT, MAP_BL_POSITION, MA
 # ===========[ SALVAR IMAGEM FINAL AO CTRL+C (SIGINT) ]=========== #
 def interrupt_ctrl_c (sig, frame):
     global grid, occupancy_grid
+    for bot in robots:
+        bot.stop_navigation()
+
     print "\n\n===============[ AGUARDE ]=============="
     print "Salvando imagens finais e saindo...\n\n"
     # roda map_saver
@@ -71,15 +74,16 @@ print 'Pressione CTRL+C para salvar o mapa de ocupação final com e sem thresho
 
 rate = rospy.Rate(5)
 
+robots = []
+
 # ============[ FUNÇÃO DE LOOP ]============ #
 def run ():
-    global goal, grid, occupancy_grid
+    global goal, grid, occupancy_grid, robots
 
     # registra Event Listener para o SIGINT
     signal.signal(signal.SIGINT, interrupt_ctrl_c)
     salvamento_mapa = time()
 
-    robots = []
     for i in range(NUMERO_ROBOS):
         print "robot_"+str(i)+"/cmd_vel", "robot_"+str(i)+"/base_scan", "robot_"+str(i)+"/base_pose_ground_truth"
         bot = Robot("robot_"+str(i)+"/cmd_vel", "robot_"+str(i)+"/base_scan", "robot_"+str(i)+"/base_pose_ground_truth")

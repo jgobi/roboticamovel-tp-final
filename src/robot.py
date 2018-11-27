@@ -22,7 +22,7 @@ from utils import Ponto, bound
 from definitions import MAP_WIDTH, MAP_HEIGHT, MAP_BL_POSITION, MAP_TR_POSITION, GRID_RESOLUTION_MULTIPLIER, LOG_ODDS_FREE, LOG_ODDS_OCC, MAP_SIDE, GRID_SIZE
 
 # ============[ DEFINIÇÕES DO USUÁRIO - NAVEGAÇÃO ]============ #
-kp = 0.9 # gain proporcional
+kp = 0.8 # gain proporcional
 
 # ============[ CLASSE ]=============
 class Robot:
@@ -79,12 +79,12 @@ class Robot:
         erro = (distanciaEuclidiana*erroCos, distanciaEuclidiana*erroSen, theta2-theta) # erro em referência ao sistema do robo
 
         if self.desviando: # estado de navegação
+            if time() - self.inicio_desviando > 20: # se robô está girando sem controle a mais de 5 segundos
+                # reseta a máquina de estados
+                self.desviando = False
+                self.girando = True
             # ----------[ DESVIO DE OBSTÁCULOS ]---------- #
             if min(self.laser_msg.ranges[110:250]) <= 0.7: # se obstáculo a frente, gira pra esquerda
-                if time() - self.inicio_desviando > 5: # se robô está self.girando sem controle a mais de 5 segundos
-                    # reseta a máquina de estados
-                    self.desviando = False
-                    self.girando = True
                 self.cmd_vel.angular.z = 3.0
                 self.cmd_vel.linear.x = 0
                 self.cmd_vel.linear.y = 0
@@ -94,10 +94,6 @@ class Robot:
                 self.cmd_vel.linear.x = 0.575
                 self.cmd_vel.linear.y = 0
             else: # do contrário, vira pra direita
-                if time() - self.inicio_desviando > 5: # se robô está self.girando sem controle a mais de 5 segundos
-                    # reseta a máquina de estados
-                    self.desviando = False
-                    self.girando = True
                 self.cmd_vel.angular.z = -3.0
                 self.cmd_vel.linear.x = 0.05
                 self.cmd_vel.linear.y = 0
@@ -120,12 +116,13 @@ class Robot:
             self.cmd_vel.linear.y = 0
             if erro[2] < 0.01: # se chegou ao ângulo certo, próximo estado
                 self.girando = False
-                if self.retaParaGoal[0] == None and (self.goal.x-self.pose.position.x) != 0: # se for o início da execução do programa, salva a reta para o goal
-                    self.retaParaGoal[0] = (self.goal.y-self.pose.position.y) / (self.goal.x-self.pose.position.x)
-                    self.retaParaGoal[1] = self.goal.y - (self.retaParaGoal[0]*self.goal.x)
-                    self.distanciaParaGoal = distanciaEuclidiana
-                else:
-                    self.chegou_goal = True
+                if self.retaParaGoal[0] == None: # se for o início da execução do programa, salva a reta para o goal
+                    if (self.goal.x-self.pose.position.x) != 0:
+                        self.retaParaGoal[0] = (self.goal.y-self.pose.position.y) / (self.goal.x-self.pose.position.x)
+                        self.retaParaGoal[1] = self.goal.y - (self.retaParaGoal[0]*self.goal.x)
+                        self.distanciaParaGoal = distanciaEuclidiana
+                    else:
+                        self.chegou_goal = True
 
         elif min(self.laser_msg.ranges[110:250]) <= 0.7 and distanciaEuclidiana > 0.35: # obstáculo à frente
             # salva hit point
