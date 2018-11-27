@@ -90,6 +90,9 @@ print 'Pressione CTRL+C para salvar o mapa de ocupação final com e sem thresho
 
 rate = rospy.Rate(5)
 
+robots = []
+
+
 # ============[ FUNÇÃO DE LOOP ]============ #
 def run ():
     global goal, grid, occupancy_grid
@@ -98,20 +101,27 @@ def run ():
     signal.signal(signal.SIGINT, interrupt_ctrl_c)
     salvamento_mapa = time()
 
-    robots = []
-    for i in range(NUMERO_ROBOS):
-        print "robot_"+str(i)+"/cmd_vel", "robot_"+str(i)+"/base_scan", "robot_"+str(i)+"/base_pose_ground_truth"
-        bot = Robot("robot_"+str(i)+"/cmd_vel", "robot_"+str(i)+"/base_scan", "robot_"+str(i)+"/base_pose_ground_truth")
-        goal = escolhe_goal()
-        bot.set_goal(goal.x, goal.y)
+    if NUMERO_ROBOS == 0:
+        print("O número de robôs é zero")
+        sys.exit(1)
+    elif NUMERO_ROBOS == 1:
+        print "cmd_vel", "base_scan", "base_pose_ground_truth"
+        bot = Robot("cmd_vel", "base_scan", "base_pose_ground_truth")
         bot.start_navigation()
         robots.append(bot)
+    else:
+        for i in range(NUMERO_ROBOS):
+            print "robot_"+str(i)+"/cmd_vel", "robot_"+str(i)+"/base_scan", "robot_"+str(i)+"/base_pose_ground_truth"
+            bot = Robot("robot_"+str(i)+"/cmd_vel", "robot_"+str(i)+"/base_scan", "robot_"+str(i)+"/base_pose_ground_truth")
+            bot.start_navigation()
+            robots.append(bot)
 
     while True:
         ready = True
         print "Quaaase"
         for bot in robots:
-            if not bot.do_navigation():
+            bready, pode_mapear, done = bot.do_navigation()
+            if not bready:
                 ready = False
             break
         if ready:
@@ -122,27 +132,51 @@ def run ():
     print "FOI!"
 
 
-    while not rospy.is_shutdown():
-        print "LOOOOOP"
-        for i,bot in enumerate(robots):
-            if time() - bot.inicio_jornada > 150 or bot.chegou_goal:
-                goal = escolhe_goal()
-                bot.set_goal(goal.x, goal.y)
-                bot.inicio_jornada = time()
-                print "Uma nova jornada para o robô "+str(i)+" começou!", goal.x, goal.y
-            bot.do_navigation()
-            bot.do_mapping(grid)
+    # while not rospy.is_shutdown():
+    #     print "LOOOOOP"
+    #     for i,bot in enumerate(robots):
+    #         if time() - bot.inicio_jornada > 150 or bot.chegou_goal:
+    #             goal = escolhe_goal()
+    #             bot.set_goal(goal.x, goal.y)
+    #             bot.inicio_jornada = time()
+    #             print "Uma nova jornada para o robô "+str(i)+" começou!", goal.x, goal.y
+    #         bot.do_navigation()
+    #         bot.do_mapping(grid)
         
-        if time() - salvamento_mapa > 15:
-            salva_mapa()
-            salvamento_mapa = time()
+    #     if time() - salvamento_mapa > 15:
+    #         salva_mapa()
+    #         salvamento_mapa = time()
+
+    #     # ===========[ PUBLICAÇÂO DE MENSAGENS ]=========== #
+    #     occupancy_grid.data = grid.flatten()
+    #     og_pub.publish(occupancy_grid)
+
+    #     rate.sleep()
+
+    bots_done = np.zeros(NUMERO_ROBOS, dtype=bool)
+    while not rospy.is_shutdown():
+        # print "LOOOOOP"
+        for i,bot in enumerate(robots):
+            if not bots_done[i]:
+                ready, pode_mapear, done = bot.do_navigation()
+                if done:
+                    bots_done[i] = True
+                    salva_mapa()
+                    if bots_done.all() == True:
+                        print "ACABO"
+                        interrupt_ctrl_c(1,2)
+                elif pode_mapear:
+                    bot.do_mapping(grid)
+        
+        # if time() - salvamento_mapa > 15:
+        #     salva_mapa()
+        #     salvamento_mapa = time()
 
         # ===========[ PUBLICAÇÂO DE MENSAGENS ]=========== #
         occupancy_grid.data = grid.flatten()
         og_pub.publish(occupancy_grid)
 
         rate.sleep()
-
 
 def escolhe_goal ():
     # tenta aleatoriamente, no máximo 20 vezes, encontrar um goal na parte não varrida do mapa

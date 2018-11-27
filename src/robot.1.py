@@ -45,9 +45,9 @@ GRID_SIZE = (MAP_SIDE*GRID_RESOLUTION_MULTIPLIER, MAP_SIDE*GRID_RESOLUTION_MULTI
 
 
 # ============[ DEFINIÇÕES DO USUÁRIO - NAVEGAÇÃO ]============ #
-kp = 0.4 # gain proporcional
+kp = 0.9 # gain proporcional
 
-DMIN = 0.8
+DMIN = .9
 
 # ============[ CLASSE ]=============
 class Robot:
@@ -70,6 +70,7 @@ class Robot:
 
         # ============[ navegacao ]============ #
         self.inicio_desviando = time()
+        self.desviando = False # variável de estado
         self.girando = True    # variável de estado
         self.retaParaGoal = [None, None] # [a, b]
         self.distanciaParaGoal = None
@@ -78,14 +79,24 @@ class Robot:
 
         self.chegou_goal = True
 
-        self.T = SRT()
-        self.cur_node = None
+        self.T = None
+        self.cur_node = 0
 
 
     # ===============[ loop principal ]===============
-    def do_movement(self): # navega até um goal, definindo se chegou nele ou não
+    def do_bug2(self):
+        if self.odom_msg == None or self.laser_msg == None or not self.navegando:
+            return False
+        
+        # conversão de quatérnio para rollPitchYaw
+        quaternion = (
+            self.pose.orientation.x,
+            self.pose.orientation.y,
+            self.pose.orientation.z,
+            self.pose.orientation.w)
+        rollPitchYaw = euler_from_quaternion(quaternion)
+        self.theta = rollPitchYaw[2] # Yaw
 
-        self.theta = self.current_theta()
 
         # ===========[ NAVEGAÇÃO ]=========== #
         erroU = (self.goal.x-self.pose.position.x, self.goal.y-self.pose.position.y) # erro em referência ao sistema universal
@@ -96,8 +107,41 @@ class Robot:
         distanciaEuclidiana = np.sqrt(erroU[0]**2 + erroU[1]**2)
         erro = (distanciaEuclidiana*erroCos, distanciaEuclidiana*erroSen, theta2-self.theta) # erro em referência ao sistema do robo
 
-        pode_mapear = True
-        if self.girando: # estado de navegação
+        if self.desviando: # estado de navegação
+            # ----------[ DESVIO DE OBSTÁCULOS ]---------- #
+            if min(self.laser_msg.ranges[110:250]) <= 0.7: # se obstáculo a frente, gira pra esquerda
+                if time() - self.inicio_desviando > 5: # se robô está self.girando sem controle a mais de 5 segundos
+                    # reseta a máquina de estados
+                    self.desviando = False
+                    self.girando = True
+                self.cmd_vel.angular.z = 3.0
+                self.cmd_vel.linear.x = 0
+                self.cmd_vel.linear.y = 0
+            elif min(self.laser_msg.ranges[0:120]) <= 0.7: # se obstáculo a direita, segue em frente
+                self.inicio_desviando = time()
+                self.cmd_vel.angular.z = 0
+                self.cmd_vel.linear.x = 0.575
+                self.cmd_vel.linear.y = 0
+            else: # do contrário, vira pra direita
+                if time() - self.inicio_desviando > 5: # se robô está self.girando sem controle a mais de 5 segundos
+                    # reseta a máquina de estados
+                    self.desviando = False
+                    self.girando = True
+                self.cmd_vel.angular.z = -3.0
+                self.cmd_vel.linear.x = 0.05
+                self.cmd_vel.linear.y = 0
+            
+            # verificação de leave point
+            y = self.retaParaGoal[0]*self.pose.position.x + self.retaParaGoal[1]
+
+            if distanciaEuclidiana < self.distanciaParaGoal and abs(y - self.pose.position.y) < 0.2:
+                self.cmd_vel.angular.z = 0
+                self.cmd_vel.linear.x = 0
+                self.cmd_vel.linear.y = 0
+                self.desviando = False
+                self.girando = True
+
+        elif self.girando: # estado de navegação
             # ----------[ GIRA PARA FICAR EM DIREÇÃO AO GOAL ]---------- #
             # acerta o ângulo
             self.cmd_vel.angular.z = kp*erro[2]
@@ -110,58 +154,67 @@ class Robot:
                     self.retaParaGoal[1] = self.goal.y - (self.retaParaGoal[0]*self.goal.x)
                     self.distanciaParaGoal = distanciaEuclidiana
 
+        elif min(self.laser_msg.ranges[110:250]) <= 0.7 and distanciaEuclidiana > 0.35: # obstáculo à frente
+            # salva hit point
+            self.distanciaParaGoal = distanciaEuclidiana
+            # começa a desviar do obstáculo
+            self.desviando = True
+            self.inicio_desviando = time()
+
         else: # movimento normal
-            self.cmd_vel.angular.z = 0
+            self.cmd_vel.angular.z = kp*erro[2]
             self.cmd_vel.linear.x = kp*erro[0]
             self.cmd_vel.linear.y = kp*erro[1]
 
-            pode_mapear = True
-
         self.v_pub.publish(self.cmd_vel)
 
-        if erro[0] < 0.1 and erro[0] < 0.1:
-            self.chegou_goal = True
-        return pode_mapear
+        return True
 
 
     # Exige um laser de 360 graus
-    def do_navigation(self): # navega, retornando se o robô está pronto para se mexer (True), se o mapeamento pode ser feito (True) e se o mapeamento acabou (True)
+    def do_navigation(self):
         c_goal = None
-        if self.odom_msg == None or self.laser_msg == None:
-            return False, False, False
-        elif not self.chegou_goal:
-            pode_mapear = self.do_movement()
-            return True, pode_mapear, False
+        if self.odom_msg == None or self.laser_msg == None or not self.navegando:
+            return False, False
+        if self.T is None:
+            self.cur_node = None
+            self.T = SRT() #Point(self.pose.position.x, self.pose.position.y), self.srt_obtem_raios_maximos())
+            self.chegou_goal = True
         else:
-            self.theta = self.current_theta()
+            self.set_goal(self.pose.position.x, self.pose.position.y)
             self.cur_node, new_node = self.T.add_node(Point(self.pose.position.x, self.pose.position.y), self.srt_obtem_raios_maximos(), self.cur_node)
             i = 1
+            theta = self.current_theta()
             while True:
-                theta_rand = randint(0, 359) + np.rad2deg(self.theta)
-                theta_rand_rad = np.deg2rad(theta_rand)
-                r=random()
-                alpha = r-0.2 if r > 0.8 else r
+                theta_rand = randint(0, 359) + int(np.rad2deg(theta))
+                r = random() - 0.2
+                alpha = r if r > 0.3 else 0.3
+                print theta_rand
                 raio = new_node.data.get_radius_from_degree(theta_rand) * alpha
-                c_goal = Point(self.pose.position.x + raio*np.cos(theta_rand_rad), self.pose.position.y + raio*np.sin(theta_rand_rad))
+                c_goal = Point(self.pose.position.x + raio*np.cos(theta_rand), self.pose.position.y + raio*np.sin(theta_rand))
+                print raio , DMIN, c_goal
                 if raio > DMIN and not self.T.is_inside_tree(c_goal, self.cur_node):
+                    print "oi"
                     break
-                elif i < 15000: # Imax
+                elif i < 50: # Imax
+                    print 'aaah'
                     i += 1
                     continue
                 else:
+                    print 'bbbbbbbb'
                     c_goal = self.T.get_parent(self.cur_node)
                     if c_goal is None:
-                        return True, True, True
+                        return True, True
                     else:
                         c_goal = c_goal.data.centro
-                        break
+                    break
             self.set_goal(c_goal.x, c_goal.y)
-        return True, True, False
+        return True, False
 
     def srt_obtem_raios_maximos(self):
         menores_raios = []
         feixes_por_setor = int(len(self.laser_msg.ranges)/12)
-        angle_min = int(np.rad2deg(self.laser_msg.angle_min))
+        angle_min = int(np.rad2deg(self.laser_msg.angle_min - self.current_theta()))
         for i in range(12):
             start = int(i*feixes_por_setor+angle_min)
             end = int(start + feixes_por_setor)
@@ -173,7 +226,7 @@ class Robot:
                 minimo = min(minimo, np.min(self.laser_msg.ranges[start:end]))
 
             menores_raios.append(minimo)
-        return np.full(12, np.min(self.laser_msg.ranges)) # menores_raios
+        return menores_raios
     
     def do_mapping(self, grid):
         # ===========[ MAPEAMENTO ]=========== #

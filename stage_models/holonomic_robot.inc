@@ -4,9 +4,9 @@ define hokuyolaser180 ranger
 (
     sensor
     (
-        range [ 0.0 8.0 ]
+        range [ 0.0 2.0 ]
         fov 360.0
-        samples 720
+        samples 721
     )
 
     #samples 90 # still useful but much faster to compute
