@@ -141,10 +141,12 @@ class Robot:
             self.cmd_vel.linear.y = 0
             if erro[2] < 0.01: # se chegou ao ângulo certo, próximo estado
                 self.girando = False
-                if self.retaParaGoal[0] == None: # se for o início da execução do programa, salva a reta para o goal
+                if self.retaParaGoal[0] == None and (self.goal.x-self.pose.position.x) != 0: # se for o início da execução do programa, salva a reta para o goal
                     self.retaParaGoal[0] = (self.goal.y-self.pose.position.y) / (self.goal.x-self.pose.position.x)
                     self.retaParaGoal[1] = self.goal.y - (self.retaParaGoal[0]*self.goal.x)
                     self.distanciaParaGoal = distanciaEuclidiana
+                else:
+                    self.chegou_goal = True
 
         elif min(self.laser_msg.ranges[110:250]) <= 0.7 and distanciaEuclidiana > 0.35: # obstáculo à frente
             # salva hit point
