@@ -40,8 +40,8 @@ MAP_TR_POSITION = [MAP_WIDTH/2, MAP_HEIGHT/2] # posição do canto inferior esqu
 GRID_RESOLUTION_MULTIPLIER = 10 # nível de detalhe do mapa. quanto maior, mais subdividido o grid
 
 
-LOG_ODDS_FREE = 5 # constante l_{free} - l_0 = 40 - 35
-LOG_ODDS_OCC  = 25 # constante l_{occ} - l_0 = 60 - 35
+LOG_ODDS_FREE = 4 # constante l_{free} - l_0 = 40 - 35
+LOG_ODDS_OCC  = 9 # constante l_{occ} - l_0 = 60 - 35
 
 
 # ============[ INICIALIZAÇÕES 1 ]============ #
