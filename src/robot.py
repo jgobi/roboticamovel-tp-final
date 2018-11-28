@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 # coding=latin1
-
+import sys
 import rospy
 from geometry_msgs.msg import Twist
 from sensor_msgs.msg import LaserScan
@@ -24,8 +24,8 @@ from srt import SRT, Point
 
 
 # ============[ DEFINIÇÕES DO USUÁRIO - MEPEAMENTO ]============ #
-MAP_WIDTH = 32 # largura do mapa
-MAP_HEIGHT = 32 # altura do mapa
+MAP_WIDTH = 16 # largura do mapa
+MAP_HEIGHT =16 # altura do mapa
 MAP_BL_POSITION = [-MAP_WIDTH/2, -MAP_HEIGHT/2] # posição do canto inferior esquerdo do mapa
 MAP_TR_POSITION = [MAP_WIDTH/2, MAP_HEIGHT/2] # posição do canto inferior esquerdo do mapa
 
@@ -47,7 +47,7 @@ GRID_SIZE = (MAP_SIDE*GRID_RESOLUTION_MULTIPLIER, MAP_SIDE*GRID_RESOLUTION_MULTI
 # ============[ DEFINIÇÕES DO USUÁRIO - NAVEGAÇÃO ]============ #
 kp = 0.4 # gain proporcional
 
-DMIN = 0.8
+DMIN = 2.8
 
 # ============[ CLASSE ]=============
 class Robot:
@@ -106,14 +106,18 @@ class Robot:
             if erro[2] < 0.01: # se chegou ao ângulo certo, próximo estado
                 self.girando = False
                 if self.retaParaGoal[0] == None: # se for o início da execução do programa, salva a reta para o goal
-                    self.retaParaGoal[0] = (self.goal.y-self.pose.position.y) / (self.goal.x-self.pose.position.x)
-                    self.retaParaGoal[1] = self.goal.y - (self.retaParaGoal[0]*self.goal.x)
-                    self.distanciaParaGoal = distanciaEuclidiana
+                    if (self.goal.x-self.pose.position.x) == 0:
+                        self.chegou_goal = True # evita divisão por 0
+                    else:
+                        self.retaParaGoal[0] = (self.goal.y-self.pose.position.y) / (self.goal.x-self.pose.position.x)
+                        self.retaParaGoal[1] = self.goal.y - (self.retaParaGoal[0]*self.goal.x)
+                        self.distanciaParaGoal = distanciaEuclidiana
 
         else: # movimento normal
             self.cmd_vel.angular.z = 0
             self.cmd_vel.linear.x = kp*erro[0]
             self.cmd_vel.linear.y = kp*erro[1]
+            print erro[1]
 
             pode_mapear = True
 
@@ -135,9 +139,10 @@ class Robot:
         else:
             self.theta = self.current_theta()
             self.cur_node, new_node = self.T.add_node(Point(self.pose.position.x, self.pose.position.y), self.srt_obtem_raios_maximos(), self.cur_node)
+            # print Point(self.pose.position.x, self.pose.position.y), self.srt_obtem_raios_maximos(), self.cur_node
             i = 1
             while True:
-                theta_rand = randint(0, 359) + np.rad2deg(self.theta)
+                theta_rand = randint(0, 359) + modulo360(np.rad2deg(self.theta))
                 theta_rand_rad = np.deg2rad(theta_rand)
                 r=random()
                 alpha = r-0.2 if r > 0.8 else r
@@ -160,20 +165,12 @@ class Robot:
 
     def srt_obtem_raios_maximos(self):
         menores_raios = []
-        feixes_por_setor = int(len(self.laser_msg.ranges)/12)
-        angle_min = int(np.rad2deg(self.laser_msg.angle_min))
-        for i in range(12):
-            start = int(i*feixes_por_setor+angle_min)
-            end = int(start + feixes_por_setor)
-            minimo = self.laser_msg.range_max
-            if start < 0 and end >= 0:
-                minimo = np.min(self.laser_msg.ranges[start:])
-                start = 0
-            if end > start:
-                minimo = min(minimo, np.min(self.laser_msg.ranges[start:end]))
-
-            menores_raios.append(minimo)
-        return np.full(12, np.min(self.laser_msg.ranges)) # menores_raios
+        angulos_por_setor = 360/12
+        menores_raios = np.full(12, self.laser_msg.range_max)
+        for idx, distancia in enumerate(self.laser_msg.ranges, start=0):
+            angulo = modulo360(np.rad2deg(self.laser_msg.angle_increment * idx + self.laser_msg.angle_min + self.theta))
+            menores_raios[int(angulo/angulos_por_setor)%12] = min(menores_raios[int(angulo/angulos_por_setor)%12], distancia)
+        return menores_raios
     
     def do_mapping(self, grid):
         # ===========[ MAPEAMENTO ]=========== #
@@ -259,3 +256,7 @@ def quaternion_to_theta (x, y, z, w):
     quaternion = (x,y,z,w)
     rollPitchYaw = euler_from_quaternion(quaternion)
     return rollPitchYaw[2] # Yaw
+
+def modulo360 (angulo):
+    base = 360
+    return ((angulo % base) + base) % base

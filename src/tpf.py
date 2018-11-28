@@ -29,11 +29,11 @@ else:
 
 
 
-NUMERO_ROBOS = 4
+NUMERO_ROBOS = 1
 
 # ============[ DEFINIÇÕES DO USUÁRIO - MEPEAMENTO ]============ #
-MAP_WIDTH = 32 # largura do mapa
-MAP_HEIGHT = 32 # altura do mapa
+MAP_WIDTH = 16 # largura do mapa
+MAP_HEIGHT = 16 # altura do mapa
 MAP_BL_POSITION = [-MAP_WIDTH/2, -MAP_HEIGHT/2] # posição do canto inferior esquerdo do mapa
 MAP_TR_POSITION = [MAP_WIDTH/2, MAP_HEIGHT/2] # posição do canto inferior esquerdo do mapa
 
@@ -99,7 +99,6 @@ def run ():
 
     # registra Event Listener para o SIGINT
     signal.signal(signal.SIGINT, interrupt_ctrl_c)
-    salvamento_mapa = time()
 
     if NUMERO_ROBOS == 0:
         print("O número de robôs é zero")
@@ -157,6 +156,7 @@ def run ():
     while not rospy.is_shutdown():
         # print "LOOOOOP"
         for i,bot in enumerate(robots):
+            bot.T.T.show()
             if not bots_done[i]:
                 ready, pode_mapear, done = bot.do_navigation()
                 if done:

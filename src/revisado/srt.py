@@ -1,29 +1,21 @@
 import treelib
 import numpy as np
-
-class Point:
-    def __init__(self, x=None, y=None, array=None):
-        if array is not None:
-            self.x = array[0]
-            self.y = array[1]
-            # self.theta = array[2]
-        else:
-            self.x = x
-            self.y = y
-            # self.theta = theta
-    def __str__(self):
-        return (self.x, self.y).__str__()
-    def to_array(self):
-        return np.array([self.x, self.y])
+from util import Point
 
 """
-`raios` deve ser um vetor com 12 raios
+`raios` deve ser um vetor com `sector_number` raios
 """
 class StarRegion:
-    def __init__(self, centro, raios):
+    def __init__(self, centro, raios, sector_number=12):
         self.centro = centro
         self.raios = raios
-    
+
+        self.SECTOR_NUMBER = sector_number
+        self.ANGLES_PER_SECTOR = 360 / self.SECTOR_NUMBER
+
+    def get_radius_from_degree(self, angulo):
+        return self.raios[int(angulo/self.ANGLES_PER_SECTOR) % self.SECTOR_NUMBER]
+
     def is_point_inside(self, ponto):
         vetor = ponto.to_array()-self.centro.to_array()
         linha = Point(array=vetor)
@@ -31,26 +23,24 @@ class StarRegion:
 
         angulo = ((angulo if angulo > 0 else (2*np.pi + angulo)) * 360 / (2*np.pi))%360
 
-        raio = self.raios[int(angulo/30)%12]
+        raio = self.get_radius_from_degree(angulo)
         
-        return (vetor[0]**2 + vetor[1]**2) < raio**2
+        return (vetor**2).sum() < raio**2
     
-    def get_radius_from_degree(self, grau):
-        return self.raios[int(grau/30)%12]
 
 
 class SRT:
-    def __init__(self):
+    def __init__(self, sector_number=12):
         self.cur_id = -1
         self.T = treelib.Tree()
-        # self.T.create_node(self.cur_id, self.cur_id, data=StarRegion(ponto_inicial, raios))
+        self.SECTOR_NUMBER = sector_number
     
     def add_node(self, ponto, raios, pai=None):
-        node_exists = lambda p: abs(p.data.centro.x-ponto.x) < 0.2 and abs(p.data.centro.y-ponto.y) < 0.2
+        node_exists = lambda p: ((p.data.centro.to_array()-ponto.to_array())**2).sum() <= 0.0324 # 0.0324 = (0.18)^2; 0.18 ~ 0.35/2; 0.35 ~ 0.33 = largura do robô
         nodes = self.T.filter_nodes(node_exists)
         if len(nodes) == 0:
-            self.cur_id+=1
-            node = self.T.create_node(self.cur_id, self.cur_id, pai, StarRegion(ponto, raios))
+            self.cur_id += 1
+            node = self.T.create_node(self.cur_id, self.cur_id, pai, StarRegion(ponto, raios, self.SECTOR_NUMBER))
             return self.cur_id, node
         else:
             return nodes[0].identifier, nodes[0]
