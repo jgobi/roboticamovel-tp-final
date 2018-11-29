@@ -2,3 +2,4 @@
 *.avi
 *.pgm
 mapa*.yaml
+*.pyc
