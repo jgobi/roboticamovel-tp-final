@@ -11,8 +11,6 @@ from nav_msgs.msg import OccupancyGrid
 
 class Map:
     def __init__(self, side, initial_value, log_odds_free, log_odds_occ, resolution_multiplier):
-        self.grid = np.full((side, side), initial_value)
-
         self.MAP_WIDTH = side # largura do mapa
         self.MAP_HEIGHT = self.MAP_WIDTH # altura do mapa
         self.MAP_BL_POSITION = [-self.MAP_WIDTH/2, -self.MAP_HEIGHT/2] # posição do canto inferior esquerdo do mapa
@@ -35,6 +33,7 @@ class Map:
         self.occupancy_grid.info.height = int(self.GRID_SIZE[1])
         self.occupancy_grid.info.resolution = self.GRID_SIZE[2]
 
+        self.grid = np.full((self.GRID_SIZE[0], self.GRID_SIZE[1]), initial_value)
 
     def do_mapping(self, pose, laser_msg):
         # self.pose do robo na grid

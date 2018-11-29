@@ -5,6 +5,7 @@ import numpy as np
 import sys
 import signal
 import subprocess
+from time import time
 
 import rospy
 
@@ -18,7 +19,9 @@ MAP_INITIAL_CELL_VALUE = 50
 MAP_LOG_ODDS_FREE = 5 # constante l_{free} - l_0 = 40 - 35
 MAP_LOG_ODDS_OCC  = 25 # constante l_{occ} - l_0 = 60 - 35
 
-BOTS_NUMBER = 4
+MAP_SAVE_INTERVAL = 20
+
+BOTS_NUMBER = 1
 
 BOT_KP = 0.4
 
@@ -71,6 +74,8 @@ def main ():
     # registra Event Listener para o SIGINT
     signal.signal(signal.SIGINT, interrupt_ctrl_c)
 
+    last_map_save = time()
+
     bots_done = np.zeros(BOTS_NUMBER, dtype=bool)
     while not rospy.is_shutdown():
         # print "LOOOOOP"
@@ -78,11 +83,13 @@ def main ():
             bot.T.T.show()
             pode_mapear = bot.do_navigation()
             if pode_mapear:
-                snap = bot.take_snapshot()
+                snap = bot.take_sensor_snapshot()
                 mapa.do_mapping(snap.pose, snap.laser_msg)
                 bots_done[i] = bot.is_done()
         mapa.publish()
-        save_map()
+        if time()-last_map_save > MAP_SAVE_INTERVAL:
+            save_map()
+            last_map_save = time()
         if bots_done.all() == True:
             print "ACABO"
             interrupt_ctrl_c(1,2)
@@ -107,8 +114,14 @@ def interrupt_ctrl_c (sig, frame):
     p=subprocess.Popen(['rosrun', 'map_server', 'map_saver', '--occ', '16', '--free', '15', '-f', pgm_path+'mapa_threshold'])
     # continua enviando mensagens enquanto o map_saver estiver ouvindo
     while p.poll() == None:
-        mapa.publish
+        mapa.publish()
         rate.sleep()
     
     # encerra a execução do programa
     sys.exit()
+
+if __name__ == '__main__':
+    try:
+        main()
+    except rospy.ROSInterruptException:
+        pass

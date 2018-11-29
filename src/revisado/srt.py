@@ -1,3 +1,6 @@
+#!/usr/bin/env python
+# coding=latin1
+
 import treelib
 import numpy as np
 from util import Point

@@ -58,10 +58,10 @@ class Robot:
         theta2 = np.arctan2(erroU[1], erroU[0]) # ângulo entre o x universal e o vetor para o goal
 
         erroTheta = theta2-self.pose.theta
-        # erroCos = np.cos(erroTheta) # cosseno do ângulo entre o sistema do robô e o vetor para o goal
-        # erroSen = np.sin(erroTheta) # seno do ângulo entre o sistema do robô e o vetor para o goal
+        erroCos = np.cos(erroTheta) # cosseno do ângulo entre o sistema do robô e o vetor para o goal
+        erroSen = np.sin(erroTheta) # seno do ângulo entre o sistema do robô e o vetor para o goal
         distanciaEuclidiana = np.sqrt(erroU[0]**2 + erroU[1]**2)
-        # erro = (distanciaEuclidiana*erroCos, distanciaEuclidiana*erroSen) # erro em referência ao sistema do robo
+        erro = (distanciaEuclidiana*erroCos, distanciaEuclidiana*erroSen) # erro em referência ao sistema do robo
 
         pode_mapear = True
         if self.girando: # estado de navegação
@@ -74,12 +74,12 @@ class Robot:
 
         else: # movimento normal
             self.cmd_vel.angular.z = 0
-            self.cmd_vel.linear.x = self.KP*distanciaEuclidiana # self.KP*erro[0]
-            self.cmd_vel.linear.y = 0 # self.KP*erro[1]
+            self.cmd_vel.linear.x = self.KP*erro[0]
+            self.cmd_vel.linear.y = self.KP*erro[1]
 
         self.v_pub.publish(self.cmd_vel)
 
-        if distanciaEuclidiana < 0.1: #erro[0] < 0.1 and erro[0] < 0.1:
+        if erro[0] < 0.1 and erro[0] < 0.1:
             self.chegou_goal = True
 
         return pode_mapear
@@ -112,7 +112,7 @@ class Robot:
         elif self.done:
             return True
         else:
-            self.DMIN = self.laser_msg.range_max
+            self.DMIN = self.laser_msg.range_max / 2
             
             if not self.chegou_goal:
                 pode_mapear = self._do_movement()
