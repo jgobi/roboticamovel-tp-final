@@ -33,8 +33,8 @@ class StarRegion:
 
 
 class SRT:
-    def __init__(self, sector_number=12):
-        self.cur_id = -1
+    def __init__(self, sector_number=12, initial_id=1):
+        self.cur_id = initial_id-1
         self.T = treelib.Tree()
         self.SECTOR_NUMBER = sector_number
     

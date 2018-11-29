@@ -7,13 +7,15 @@ import signal
 import subprocess
 from time import time
 
+from srt import SRT, Point
+
 import rospy
 
-from robot import Robot
+from robot import Robot, SRT_SECTOR_QTD
 from map import Map
 
 # ============[ DEFINIÇÕES DO USUÁRIO ]============ #
-MAP_SIDE = 16 # largura do mapa
+MAP_SIDE = 32 # largura do mapa
 MAP_GRID_RESOLUTION_MULTIPLIER = 10 # nível de detalhe do mapa. quanto maior, mais subdividido o grid
 MAP_INITIAL_CELL_VALUE = 50
 MAP_LOG_ODDS_FREE = 5 # constante l_{free} - l_0 = 40 - 35
@@ -21,7 +23,7 @@ MAP_LOG_ODDS_OCC  = 25 # constante l_{occ} - l_0 = 60 - 35
 
 MAP_SAVE_INTERVAL = 20
 
-BOTS_NUMBER = 1
+BOTS_NUMBER = 4
 
 BOT_KP = 0.7
 
@@ -37,6 +39,8 @@ if len(sys.argv) >= 2:
 else:
     pgm_path = './'
 
+main_tree = SRT(SRT_SECTOR_QTD, 0)
+main_tree.add_node(Point(0, 0), np.zeros(SRT_SECTOR_QTD))
 
 def main ():
     global mapa, robos
@@ -52,7 +56,7 @@ def main ():
         robos.append(bot)
     else:
         for i in range(BOTS_NUMBER):
-            bot = Robot("robot_"+str(i)+"/cmd_vel", "robot_"+str(i)+"/base_scan", "robot_"+str(i)+"/base_pose_ground_truth", BOT_KP)
+            bot = Robot("robot_"+str(i)+"/cmd_vel", "robot_"+str(i)+"/base_scan", "robot_"+str(i)+"/base_pose_ground_truth", BOT_KP, main_tree)
             robos.append(bot)
 
     print 'Pressione CTRL+C para salvar o mapa de ocupação final com e sem threshold e depois sair'
@@ -78,9 +82,9 @@ def main ():
 
     bots_done = np.zeros(BOTS_NUMBER, dtype=bool)
     while not rospy.is_shutdown():
+        main_tree.T.show()
         # print "LOOOOOP"
         for i,bot in enumerate(robos):
-            bot.T.T.show()
             bot.do_navigation()
             snap = bot.take_sensor_snapshot()
             mapa.do_mapping(snap.pose, snap.laser_msg)

@@ -23,8 +23,11 @@ class Snapshot:
 
 
 # ============[ CLASSE ]=============
+"""
+tree param must be NOne or a SRT tree with a root node identified by 0
+"""
 class Robot:
-    def __init__ (self, cmd_vel_topic, base_scan_topic, odom_topic, kp):
+    def __init__ (self, cmd_vel_topic, base_scan_topic, odom_topic, kp, tree=None):
 
         self.KP = kp
         self.DMIN = 0 # este valor é atualizado quando a informação do laser fica disponível
@@ -48,8 +51,12 @@ class Robot:
         self.retornar_pai = False
         self.done = False
 
-        self.T = SRT(SRT_SECTOR_QTD)
-        self.cur_node = None
+        if tree is None:
+            self.T = SRT(SRT_SECTOR_QTD)
+            self.cur_node = None
+        else:
+            self.T = tree
+            self.cur_node = 0
 
 
     # ===============[ loop principal ]===============
@@ -64,7 +71,7 @@ class Robot:
         distanciaEuclidiana = np.sqrt(erroU[0]**2 + erroU[1]**2)
         erro = (distanciaEuclidiana*erroCos, distanciaEuclidiana*erroSen) # erro em referência ao sistema do robo
 
-        obstaculo_proximo = np.min(self.laser_msg.ranges) < FOLGA_ROBO/2.0
+        obstaculo_proximo = np.min(self.laser_msg.ranges) <= FOLGA_ROBO/1.25
 
         self.cmd_vel.angular.z = 0
         self.cmd_vel.linear.x = self.KP*erro[0]
@@ -81,11 +88,15 @@ class Robot:
     def _get_cur_node_parent_location(self):
         goal = self.T.get_parent(self.cur_node)
         if goal is not None:
-            goal = goal.data.centro
+            if goal.identifier != 0:
+                goal = goal.data.centro
+            else:
+                goal = None
         return goal
 
     def _choose_goal(self):
         self.cur_node, new_node = self.T.add_node(Point(self.pose.x, self.pose.y), self.srt_obtem_raios_maximos(), self.cur_node)
+        print self.cur_node, new_node
         goal_valid = False
         for i in range(150):
             theta_rand = randint(0, 359) + modulo360(np.rad2deg(self.pose.theta))
@@ -96,7 +107,7 @@ class Robot:
             if raio > self.DMIN and not self.T.is_inside_tree(c_goal, self.cur_node):
                 goal_valid = True
                 break
-        
+
         if not goal_valid:
             c_goal = self._get_cur_node_parent_location()
         
@@ -104,7 +115,7 @@ class Robot:
 
     # Exige um laser de 360 graus
     def do_navigation(self): # navega
-        if self.odom_msg == None or self.laser_msg == None:
+        if self.odom_msg == None or self.laser_msg == None or self.done:
             return
         else:
             self.DMIN = self.laser_msg.range_max / 2

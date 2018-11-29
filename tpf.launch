@@ -24,6 +24,6 @@
   </node>
   <node pkg="rviz" type="rviz" name="rviz" args="-d $(arg rviz_file)">
   </node>
-  <node pkg="tf" type="static_transform_publisher" name="static_transform_publisher" args="-8 -8 0 0 0 0 1 /odom /map 10">
+  <node pkg="tf" type="static_transform_publisher" name="static_transform_publisher" args="-16 -16 0 0 0 0 1 /odom /map 10">
   </node>
 </launch>
