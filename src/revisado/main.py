@@ -51,7 +51,6 @@ def main ():
         print("O número de robôs é zero")
         sys.exit(1)
     elif BOTS_NUMBER == 1:
-        print "cmd_vel", "base_scan", "base_pose_ground_truth"
         bot = Robot("cmd_vel", "base_scan", "base_pose_ground_truth", BOT_KP)
         robos.append(bot)
     else:
@@ -59,7 +58,7 @@ def main ():
             bot = Robot("robot_"+str(i)+"/cmd_vel", "robot_"+str(i)+"/base_scan", "robot_"+str(i)+"/base_pose_ground_truth", BOT_KP, main_tree)
             robos.append(bot)
 
-    print 'Pressione CTRL+C para salvar o mapa de ocupação final com e sem threshold e depois sair'
+    print "No final da execução serão salvos os arquivos 'mapa.pgm', 'mapa_threshold.pmg', seus repectivos '.yaml' e a representação da árvore gerada pelo SRT-Estrela (apenas com os nós e os pontos).\n"
 
     # aguarda robôs ficarem prontos
     while True:
@@ -82,7 +81,6 @@ def main ():
 
     bots_done = np.zeros(BOTS_NUMBER, dtype=bool)
     while not rospy.is_shutdown():
-        main_tree.T.show()
         # print "LOOOOOP"
         for i,bot in enumerate(robos):
             bot.do_navigation()
@@ -105,10 +103,12 @@ def save_map ():
 # ===========[ SALVAR IMAGEM FINAL AO CTRL+C (SIGINT) ]=========== #
 def interrupt_ctrl_c (sig, frame):
     print "\n\n===============[ AGUARDE ]=============="
+    print "Salvando árvore final...\n\n"
+    main_tree.T.save2file(pgm_path+"tree.txt")
     print "Salvando imagens finais e saindo...\n\n"
     # roda map_saver
     p=subprocess.Popen(['rosrun', 'map_server', 'map_saver', '-f', pgm_path+'mapa'])
-    # continua enviando mensagens enquanto o map_saver estiver ouvindo
+    # continua enviando mensagens enquanto o map_saver estiver ouvindopgm_path
     while p.poll() == None:
         mapa.publish()
         rate.sleep()

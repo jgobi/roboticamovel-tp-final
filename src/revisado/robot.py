@@ -96,7 +96,6 @@ class Robot:
 
     def _choose_goal(self):
         self.cur_node, new_node = self.T.add_node(Point(self.pose.x, self.pose.y), self.srt_obtem_raios_maximos(), self.cur_node)
-        print self.cur_node, new_node
         goal_valid = False
         for i in range(150):
             theta_rand = randint(0, 359) + modulo360(np.rad2deg(self.pose.theta))
@@ -153,6 +152,13 @@ class Robot:
     def set_goal (self, goal):
         if goal is None:
             self.done = True
+            # stop robot
+            self.cmd_vel.angular.z = 0
+            self.cmd_vel.linear.x = 0
+            self.cmd_vel.linear.y = 0
+
+            self.v_pub.publish(self.cmd_vel)
+
         else:
             # define goal
             self.goal = goal
