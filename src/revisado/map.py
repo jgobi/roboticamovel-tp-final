@@ -6,22 +6,8 @@ from bresenham import bresenham
 
 from util import quaternion_to_theta, bound, Pose
 
-# ============[ DEFINIÇÕES DO USUÁRIO - MEPEAMENTO ]============ #
-MAP_WIDTH = 16 # largura do mapa
-MAP_HEIGHT = MAP_WIDTH # altura do mapa
-MAP_BL_POSITION = [-MAP_WIDTH/2, -MAP_HEIGHT/2] # posição do canto inferior esquerdo do mapa
-MAP_TR_POSITION = [MAP_WIDTH/2, MAP_HEIGHT/2] # posição do canto inferior esquerdo do mapa
-
-GRID_RESOLUTION_MULTIPLIER = 10 # nível de detalhe do mapa. quanto maior, mais subdividido o grid
-
-INITIAL_CELL_VALUE = 50
-LOG_ODDS_FREE = 5 # constante l_{free} - l_0 = 40 - 35
-LOG_ODDS_OCC  = 25 # constante l_{occ} - l_0 = 60 - 35
-
-
-# ============[ INICIALIZAÇÕES 1 ]============ #
-MAP_SIDE = int(np.ceil(max(MAP_WIDTH, MAP_HEIGHT))) # o mapa precisa ser quadrado para o algoritmo funcionar bem
-GRID_SIZE = (MAP_SIDE*GRID_RESOLUTION_MULTIPLIER, MAP_SIDE*GRID_RESOLUTION_MULTIPLIER, 1.0/GRID_RESOLUTION_MULTIPLIER) # The last one is the resolution
+import rospy
+from nav_msgs.msg import OccupancyGrid
 
 class Map:
     def __init__(self, side, initial_value, log_odds_free, log_odds_occ, resolution_multiplier):
@@ -40,6 +26,15 @@ class Map:
 
         self.MAP_SIDE = int(np.ceil(max(self.MAP_WIDTH, self.MAP_HEIGHT))) # o mapa precisa ser quadrado para o algoritmo funcionar bem
         self.GRID_SIZE = (self.MAP_SIDE*self.GRID_RESOLUTION_MULTIPLIER, self.MAP_SIDE*self.GRID_RESOLUTION_MULTIPLIER, 1.0/self.GRID_RESOLUTION_MULTIPLIER) # The last one is the resolution
+
+        self.og_pub = rospy.Publisher('map', OccupancyGrid, queue_size=10)
+        self.occupancy_grid = OccupancyGrid()
+        self.occupancy_grid.header.frame_id = "map"
+        self.occupancy_grid.header.stamp = rospy.Time.now()
+        self.occupancy_grid.info.width = int(self.GRID_SIZE[0])
+        self.occupancy_grid.info.height = int(self.GRID_SIZE[1])
+        self.occupancy_grid.info.resolution = self.GRID_SIZE[2]
+
 
     def do_mapping(self, pose, laser_msg):
         # self.pose do robo na grid
@@ -86,3 +81,8 @@ class Map:
 
     def flatten(self):
         return self.grid.flatten()
+
+    def publish(self):
+        self.occupancy_grid.header.stamp = rospy.Time.now()
+        self.occupancy_grid.data = self.flatten()
+        self.og_pub.publish(self.occupancy_grid)

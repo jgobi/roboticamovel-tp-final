@@ -40,17 +40,19 @@ class Robot:
 
         self.cmd_vel = Twist()
 
+        self.sensors_ready = np.array([False, False]) # [Odom, Laser]
 
         # ============[ navegacao ]============ #
         self.girando = True    # variável de estado
         self.chegou_goal = True
+        self.done = False
 
         self.T = SRT(SRT_SECTOR_QTD)
         self.cur_node = None
 
 
     # ===============[ loop principal ]===============
-    def do_movement(self): # navega até um goal, definindo se chegou nele ou não
+    def _do_movement(self): # navega até um goal, definindo se chegou nele ou não
         # ===========[ NAVEGAÇÃO ]=========== #
         erroU = (self.goal.x-self.pose.x, self.goal.y-self.pose.y) # erro em referência ao sistema universal
         theta2 = np.arctan2(erroU[1], erroU[0]) # ângulo entre o x universal e o vetor para o goal
@@ -63,6 +65,7 @@ class Robot:
 
         pode_mapear = True
         if self.girando: # estado de navegação
+            pode_mapear = False
             self.cmd_vel.angular.z = self.KP*erroTheta
             self.cmd_vel.linear.x = 0
             self.cmd_vel.linear.y = 0
@@ -74,8 +77,6 @@ class Robot:
             self.cmd_vel.linear.x = self.KP*distanciaEuclidiana # self.KP*erro[0]
             self.cmd_vel.linear.y = 0 # self.KP*erro[1]
 
-            pode_mapear = True
-
         self.v_pub.publish(self.cmd_vel)
 
         if distanciaEuclidiana < 0.1: #erro[0] < 0.1 and erro[0] < 0.1:
@@ -84,37 +85,45 @@ class Robot:
         return pode_mapear
 
 
+    def _choose_goal(self):
+        self.cur_node, new_node = self.T.add_node(Point(self.pose.x, self.pose.y), self.srt_obtem_raios_maximos(), self.cur_node)
+        goal_valid = False
+        for i in range(150):
+            theta_rand = randint(0, 359) + modulo360(np.rad2deg(self.pose.theta))
+            theta_rand_rad = np.deg2rad(theta_rand)
+            alpha = random()
+            raio = new_node.data.get_radius_from_degree(theta_rand) * alpha
+            c_goal = Point(self.pose.x + raio*np.cos(theta_rand_rad), self.pose.y + raio*np.sin(theta_rand_rad))
+            if raio > self.DMIN and not self.T.is_inside_tree(c_goal, self.cur_node):
+                goal_valid = True
+                break
+        
+        if not goal_valid:
+            c_goal = self.T.get_parent(self.cur_node)
+            if c_goal is not None:
+                c_goal = c_goal.data.centro
+        
+        return c_goal
+
     # Exige um laser de 360 graus
-    def do_navigation(self): # navega, retornando se o robô está pronto para se mexer (True), se o mapeamento pode ser feito (True) e se o mapeamento acabou (True)
-        c_goal = None
+    def do_navigation(self): # navega, retornando se o mapeamento pode ser feito (True)
         if self.odom_msg == None or self.laser_msg == None:
-            return False, False, False
-        elif not self.chegou_goal:
-            pode_mapear = self.do_movement()
-            return True, pode_mapear, False
+            return False
+        elif self.done:
+            return True
         else:
-            self.cur_node, new_node = self.T.add_node(Point(self.pose.x, self.pose.y), self.srt_obtem_raios_maximos(), self.cur_node)
+            self.DMIN = self.laser_msg.range_max
             
-            goal_valid = False
-            for i in range(150):
-                theta_rand = randint(0, 359) + modulo360(np.rad2deg(self.pose.theta))
-                theta_rand_rad = np.deg2rad(theta_rand)
-                alpha = random()
-                raio = new_node.data.get_radius_from_degree(theta_rand) * alpha
-                c_goal = Point(self.pose.x + raio*np.cos(theta_rand_rad), self.pose.y + raio*np.sin(theta_rand_rad))
-                if raio > self.DMIN and not self.T.is_inside_tree(c_goal, self.cur_node):
-                    goal_valid = True
-                    break
-            
-            if not goal_valid:
-                c_goal = self.T.get_parent(self.cur_node)
-                if c_goal is None:
-                    return True, True, True
+            if not self.chegou_goal:
+                pode_mapear = self._do_movement()
+                return pode_mapear
+            else:
+                goal = self._choose_goal()
+                if goal is None:
+                    self.done = True
                 else:
-                    c_goal = c_goal.data.centro
-            
-            self.set_goal(c_goal.x, c_goal.y)
-            return True, True, False
+                    self.set_goal(goal.x, goal.y)
+                return True
 
     def srt_obtem_raios_maximos(self):
         menores_raios = []
@@ -126,13 +135,15 @@ class Robot:
         return menores_raios
     
     def laser_callback (self, msg):
+        self.sensors_ready[1] = True
         self.laser_msg = msg
 
     def odom_callback (self, msg):
+        self.sensors_ready[0] = True
         self.odom_msg = msg
         self.pose = Pose(odom_msg=self.odom_msg)
 
-    def take_sensor_snapshot(self):
+    def take_sensor_snapshot (self):
         return Snapshot(self.pose, self.laser_msg)
 
     def set_goal (self, x, y):
@@ -141,3 +152,9 @@ class Robot:
         # reinicia estados de navegação
         self.girando = True
         self.chegou_goal = False
+
+    def is_ready (self):
+        return self.sensors_ready.all() == True
+    
+    def is_done (self):
+        return self.done
