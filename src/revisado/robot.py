@@ -12,7 +12,8 @@ from geometry_msgs.msg import Twist
 from sensor_msgs.msg import LaserScan
 from nav_msgs.msg import Odometry
 
-TAMANHO_ROBO = .47 # 0.33 de largura do robô + 0.14 de margem de erro
+TAMANHO_ROBO = .33
+FOLGA_ROBO = TAMANHO_ROBO + 0.14 # 0.14 é uma margem de erro escolhida experimentalmente
 SRT_SECTOR_QTD = 12
 
 class Snapshot:
@@ -44,6 +45,7 @@ class Robot:
 
         # ============[ navegacao ]============ #
         self.chegou_goal = True
+        self.retornar_pai = False
         self.done = False
 
         self.T = SRT(SRT_SECTOR_QTD)
@@ -62,7 +64,8 @@ class Robot:
         distanciaEuclidiana = np.sqrt(erroU[0]**2 + erroU[1]**2)
         erro = (distanciaEuclidiana*erroCos, distanciaEuclidiana*erroSen) # erro em referência ao sistema do robo
 
-        pode_mapear = True
+        obstaculo_proximo = np.min(self.laser_msg.ranges) < FOLGA_ROBO/2.0
+
         self.cmd_vel.angular.z = 0
         self.cmd_vel.linear.x = self.KP*erro[0]
         self.cmd_vel.linear.y = self.KP*erro[1]
@@ -71,9 +74,15 @@ class Robot:
 
         if distanciaEuclidiana < 0.1:
             self.chegou_goal = True
+        elif obstaculo_proximo:
+            self.retornar_pai = True
 
-        return pode_mapear
 
+    def _get_cur_node_parent_location(self):
+        goal = self.T.get_parent(self.cur_node)
+        if goal is not None:
+            goal = goal.data.centro
+        return goal
 
     def _choose_goal(self):
         self.cur_node, new_node = self.T.add_node(Point(self.pose.x, self.pose.y), self.srt_obtem_raios_maximos(), self.cur_node)
@@ -89,31 +98,25 @@ class Robot:
                 break
         
         if not goal_valid:
-            c_goal = self.T.get_parent(self.cur_node)
-            if c_goal is not None:
-                c_goal = c_goal.data.centro
+            c_goal = self._get_cur_node_parent_location()
         
         return c_goal
 
     # Exige um laser de 360 graus
-    def do_navigation(self): # navega, retornando se o mapeamento pode ser feito (True)
+    def do_navigation(self): # navega
         if self.odom_msg == None or self.laser_msg == None:
-            return False
-        elif self.done:
-            return True
+            return
         else:
             self.DMIN = self.laser_msg.range_max / 2
-            
-            if not self.chegou_goal:
-                pode_mapear = self._do_movement()
-                return pode_mapear
+            if self.retornar_pai:
+                self.retornar_pai = False
+                parent = self._get_cur_node_parent_location()
+                self.set_goal(parent)
+            elif not self.chegou_goal:
+                self._do_movement()
             else:
                 goal = self._choose_goal()
-                if goal is None:
-                    self.done = True
-                else:
-                    self.set_goal(goal.x, goal.y)
-                return True
+                self.set_goal(goal)
 
     def srt_obtem_raios_maximos(self):
         menores_raios = []
@@ -121,7 +124,7 @@ class Robot:
         menores_raios = np.full(SRT_SECTOR_QTD, self.laser_msg.range_max)
         for idx, distancia in enumerate(self.laser_msg.ranges, start=0):
             angulo = modulo360(np.rad2deg(self.laser_msg.angle_increment * idx + self.laser_msg.angle_min + self.pose.theta))
-            menores_raios[int(angulo/angulos_por_setor)%SRT_SECTOR_QTD] = min(menores_raios[int(angulo/angulos_por_setor)%SRT_SECTOR_QTD], distancia-TAMANHO_ROBO)
+            menores_raios[int(angulo/angulos_por_setor)%SRT_SECTOR_QTD] = min(menores_raios[int(angulo/angulos_por_setor)%SRT_SECTOR_QTD], distancia-FOLGA_ROBO)
         return menores_raios
     
     def laser_callback (self, msg):
@@ -136,11 +139,14 @@ class Robot:
     def take_sensor_snapshot (self):
         return Snapshot(self.pose, self.laser_msg)
 
-    def set_goal (self, x, y):
-        # define goal
-        self.goal = Point(x,y)
-        # reinicia estados de navegação
-        self.chegou_goal = False
+    def set_goal (self, goal):
+        if goal is None:
+            self.done = True
+        else:
+            # define goal
+            self.goal = goal
+            # reinicia estados de navegação
+            self.chegou_goal = False
 
     def is_ready (self):
         return self.sensors_ready.all() == True

@@ -23,7 +23,7 @@ MAP_SAVE_INTERVAL = 20
 
 BOTS_NUMBER = 1
 
-BOT_KP = 0.4
+BOT_KP = 0.7
 
 rospy.init_node('tpf')
 rate = rospy.Rate(5)
@@ -81,11 +81,10 @@ def main ():
         # print "LOOOOOP"
         for i,bot in enumerate(robos):
             bot.T.T.show()
-            pode_mapear = bot.do_navigation()
-            if pode_mapear:
-                snap = bot.take_sensor_snapshot()
-                mapa.do_mapping(snap.pose, snap.laser_msg)
-                bots_done[i] = bot.is_done()
+            bot.do_navigation()
+            snap = bot.take_sensor_snapshot()
+            mapa.do_mapping(snap.pose, snap.laser_msg)
+            bots_done[i] = bot.is_done()
         mapa.publish()
         if time()-last_map_save > MAP_SAVE_INTERVAL:
             save_map()
