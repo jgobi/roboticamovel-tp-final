@@ -12,7 +12,7 @@ from geometry_msgs.msg import Twist
 from sensor_msgs.msg import LaserScan
 from nav_msgs.msg import Odometry
 
-TAMANHO_ROBO = .45 # 0.33 de largura do robô + 0.1 de margem de erro
+TAMANHO_ROBO = .47 # 0.33 de largura do robô + 0.14 de margem de erro
 SRT_SECTOR_QTD = 12
 
 class Snapshot:
