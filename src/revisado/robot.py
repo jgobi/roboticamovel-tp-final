@@ -28,8 +28,6 @@ class Robot:
         self.KP = kp
         self.DMIN = 0 # TODO: atualizar para metade do range do laser
 
-        self.sensor_snapshot = Snapshot()
-
         self.goal = Point(0, 0) # TODO: atualizar para metade do range do laser
 
         self.laser_msg = None
@@ -57,17 +55,18 @@ class Robot:
         erroU = (self.goal.x-self.pose.x, self.goal.y-self.pose.y) # erro em referência ao sistema universal
         theta2 = np.arctan2(erroU[1], erroU[0]) # ângulo entre o x universal e o vetor para o goal
 
-        erroCos = np.cos(theta2-self.pose.theta) # cosseno do ângulo entre o sistema do robô e o vetor para o goal
-        erroSen = np.sin(theta2-self.pose.theta) # seno do ângulo entre o sistema do robô e o vetor para o goal
+        erroTheta = theta2-self.pose.theta
+        # erroCos = np.cos(erroTheta) # cosseno do ângulo entre o sistema do robô e o vetor para o goal
+        # erroSen = np.sin(erroTheta) # seno do ângulo entre o sistema do robô e o vetor para o goal
         distanciaEuclidiana = np.sqrt(erroU[0]**2 + erroU[1]**2)
-        erro = (distanciaEuclidiana*erroCos, distanciaEuclidiana*erroSen, theta2-self.pose.theta) # erro em referência ao sistema do robo
+        # erro = (distanciaEuclidiana*erroCos, distanciaEuclidiana*erroSen) # erro em referência ao sistema do robo
 
         pode_mapear = True
         if self.girando: # estado de navegação
-            self.cmd_vel.angular.z = self.KP*erro[2]
+            self.cmd_vel.angular.z = self.KP*erroTheta
             self.cmd_vel.linear.x = 0
             self.cmd_vel.linear.y = 0
-            if erro[2] < 0.01: # se chegou ao ângulo certo, próximo estado
+            if erroTheta < 0.01: # se chegou ao ângulo certo, próximo estado
                 self.girando = False
 
         else: # movimento normal
@@ -133,10 +132,9 @@ class Robot:
         self.odom_msg = msg
         self.pose = Pose(odom_msg=self.odom_msg)
 
-    def take_snapshot(self):
-        self.sensor_snapshot.pose = self.pose
-        self.sensor_snapshot.laser_msg = self.laser_msg
-    
+    def take_sensor_snapshot(self):
+        return Snapshot(self.pose, self.laser_msg)
+
     def set_goal (self, x, y):
         # define goal
         self.goal = Point(x,y)
