@@ -27,9 +27,9 @@ class Robot:
     def __init__ (self, cmd_vel_topic, base_scan_topic, odom_topic, kp):
 
         self.KP = kp
-        self.DMIN = 0 # TODO: atualizar para metade do range do laser
+        self.DMIN = 0 # este valor é atualizado quando a informação do laser fica disponível
 
-        self.goal = Point(0, 0) # TODO: atualizar para metade do range do laser
+        self.goal = Point(0, 0) # este valor é atualizado quando a informação do laser fica disponível
 
         self.laser_msg = None
         self.odom_msg = None
