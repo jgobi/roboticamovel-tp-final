@@ -43,7 +43,7 @@ class SRT:
         nodes = self.T.filter_nodes(node_exists)
         if len(nodes) == 0:
             self.cur_id += 1
-            node = self.T.create_node(self.cur_id, self.cur_id, pai, StarRegion(ponto, raios, self.SECTOR_NUMBER))
+            node = self.T.create_node(str(self.cur_id)+": "+str(ponto), self.cur_id, pai, StarRegion(ponto, raios, self.SECTOR_NUMBER))
             return self.cur_id, node
         else:
             return nodes[0].identifier, nodes[0]

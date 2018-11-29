@@ -12,7 +12,7 @@ from geometry_msgs.msg import Twist
 from sensor_msgs.msg import LaserScan
 from nav_msgs.msg import Odometry
 
-TAMANHO_ROBO = .35
+TAMANHO_ROBO = .45 # 0.33 de largura do robô + 0.1 de margem de erro
 SRT_SECTOR_QTD = 12
 
 class Snapshot:
@@ -43,7 +43,6 @@ class Robot:
         self.sensors_ready = np.array([False, False]) # [Odom, Laser]
 
         # ============[ navegacao ]============ #
-        self.girando = True    # variável de estado
         self.chegou_goal = True
         self.done = False
 
@@ -64,22 +63,13 @@ class Robot:
         erro = (distanciaEuclidiana*erroCos, distanciaEuclidiana*erroSen) # erro em referência ao sistema do robo
 
         pode_mapear = True
-        if self.girando: # estado de navegação
-            pode_mapear = False
-            self.cmd_vel.angular.z = self.KP*erroTheta
-            self.cmd_vel.linear.x = 0
-            self.cmd_vel.linear.y = 0
-            if erroTheta < 0.01: # se chegou ao ângulo certo, próximo estado
-                self.girando = False
-
-        else: # movimento normal
-            self.cmd_vel.angular.z = 0
-            self.cmd_vel.linear.x = self.KP*erro[0]
-            self.cmd_vel.linear.y = self.KP*erro[1]
+        self.cmd_vel.angular.z = 0
+        self.cmd_vel.linear.x = self.KP*erro[0]
+        self.cmd_vel.linear.y = self.KP*erro[1]
 
         self.v_pub.publish(self.cmd_vel)
 
-        if erro[0] < 0.1 and erro[0] < 0.1:
+        if distanciaEuclidiana < 0.1:
             self.chegou_goal = True
 
         return pode_mapear
@@ -150,7 +140,6 @@ class Robot:
         # define goal
         self.goal = Point(x,y)
         # reinicia estados de navegação
-        self.girando = True
         self.chegou_goal = False
 
     def is_ready (self):
