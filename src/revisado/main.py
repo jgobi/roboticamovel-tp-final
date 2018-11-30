@@ -43,7 +43,9 @@ main_tree = SRT(SRT_SECTOR_QTD, 0)
 main_tree.add_node(Point(0, 0), np.zeros(SRT_SECTOR_QTD))
 
 def main ():
-    global mapa, robos
+    global mapa, robos, inicio_programa
+
+    inicio_programa = time()
 
     mapa = Map(MAP_SIDE, MAP_INITIAL_CELL_VALUE, MAP_LOG_ODDS_FREE, MAP_LOG_ODDS_OCC, MAP_GRID_RESOLUTION_MULTIPLIER)
     robos = []
@@ -120,6 +122,7 @@ def interrupt_ctrl_c (sig, frame):
         mapa.publish()
         rate.sleep()
     
+    print "\n=== Tempo total do mapeamento: "+str(time()-inicio_programa)+" segundos. ===\n"
     # encerra a execução do programa
     sys.exit()
 

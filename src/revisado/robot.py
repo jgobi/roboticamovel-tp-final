@@ -97,7 +97,7 @@ class Robot:
     def _choose_goal(self):
         self.cur_node, new_node = self.T.add_node(Point(self.pose.x, self.pose.y), self.srt_obtem_raios_maximos(), self.cur_node)
         goal_valid = False
-        for i in range(150):
+        for _ in range(150):
             theta_rand = randint(0, 359) + modulo360(np.rad2deg(self.pose.theta))
             theta_rand_rad = np.deg2rad(theta_rand)
             alpha = random()

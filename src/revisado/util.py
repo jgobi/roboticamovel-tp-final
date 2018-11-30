@@ -62,6 +62,6 @@ class Point:
             self.x = x
             self.y = y
     def __str__(self):
-        return (self.x, self.y).__str__()
+        return "(%.2f, %.2f)" % (self.x, self.y)
     def to_array(self):
         return np.array([self.x, self.y])
